@@ -219,11 +219,11 @@
         window.firebase = { apps: [], initializeApp: function() {}, database: function() { return { ref: function() { return { on: function() {}, once: function() { return Promise.resolve({ val: function() { return null; } }); }, transaction: function() { return Promise.resolve({ committed: false }); } }; } }; } };
       }
     </script>
-    <script src="api-config.js"></script>
-    <script src="shared-store.js"></script>
-    <script src="notifications.js"></script>
-    <script src="dueno.js"></script>
-    <script src="pwa.js"></script>
+    <script type="module" src="api-config.js"></script>
+    <script type="module" src="shared-store.js"></script>
+    <script type="module" src="notifications.js"></script>
+    <script type="module" src="dueno.js"></script>
+    <script type="module" src="pwa.js"></script>
   </body>
 </html>
 

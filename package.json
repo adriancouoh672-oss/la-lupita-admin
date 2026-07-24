@@ -5,6 +5,7 @@
   "description": "Panadería La Lupita - Admin Web App (Extraído de APK)",
   "scripts": {
     "dev": "vite --host --port 3000",
+    "build": "vite build",
     "start": "vite --host --port 3000",
     "serve": "npx serve -l 3000",
     "preview": "vite preview"
