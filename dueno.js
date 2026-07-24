@@ -1,4 +1,4 @@
-// Panadería La Lupita - Admin App Controller
+// Panadería La Lupita - Admin App Controller (Event-Delegated)
 const $ = (selector) => document.querySelector(selector);
 const money = (amount) => `$${Number(amount || 0).toFixed(2)}`;
 
@@ -43,7 +43,7 @@ function go(id) {
     app.classList.toggle("chat-open", id === "adminChatScreen");
   }
   renderAdmin();
-  if (window.refreshCloudData) window.refreshCloudData();
+  if (typeof window.refreshCloudData === "function") window.refreshCloudData();
 }
 
 function openAdminNotificationRoute(route) {
@@ -102,10 +102,6 @@ function renderOrders(db) {
       </article>
     `;
   }).join("");
-
-  document.querySelectorAll("[data-order-detail]").forEach((button) => {
-    button.onclick = () => openOrderDetail(button.dataset.orderDetail);
-  });
 }
 
 function stockState(stock) {
@@ -144,23 +140,10 @@ function renderProducts(db) {
       </div>
     </article>
   `).join("");
-
-  document.querySelectorAll("[data-edit-product]").forEach((button) => {
-    button.onclick = () => openEditProduct(Number(button.dataset.editProduct));
-  });
-  document.querySelectorAll("[data-daily-product]").forEach((button) => {
-    button.onclick = () => setDailyProduct(Number(button.dataset.dailyProduct));
-  });
-  document.querySelectorAll("[data-toggle-product]").forEach((button) => {
-    button.onclick = () => toggleProduct(Number(button.dataset.toggleProduct));
-  });
-  document.querySelectorAll("[data-delete-product]").forEach((button) => {
-    button.onclick = () => openDeleteProduct(Number(button.dataset.deleteProduct));
-  });
 }
 
 function renderQuotes(db) {
-  const container = $("#adminCotizaciones");
+  const container = $("#adminQuotes");
   if (!container) return;
   const quotes = Array.isArray(db.quotes) ? db.quotes : [];
   if (!quotes.length) {
@@ -183,14 +166,6 @@ function renderQuotes(db) {
       </article>
     `;
   }).join("");
-
-  document.querySelectorAll("[data-complete-quote]").forEach((button) => {
-    if (button.disabled) return;
-    button.onclick = () => updateQuoteStatus(button.dataset.completeQuote, "Completado");
-  });
-  document.querySelectorAll("[data-quote-detail]").forEach((button) => {
-    button.onclick = () => openQuoteDetail(button.dataset.quoteDetail);
-  });
 }
 
 function cleanId(value) {
@@ -235,22 +210,6 @@ function renderUsers(db) {
       </article>
     `;
   }).join("");
-
-  document.querySelectorAll("[data-user-menu]").forEach((button) => {
-    button.onclick = () => {
-      document.querySelectorAll(".user-menu.show").forEach((menu) => {
-        if (menu.id !== `userMenu-${cleanId(button.dataset.userMenu)}`) menu.classList.remove("show");
-      });
-      const menu = $(`#userMenu-${cleanId(button.dataset.userMenu)}`);
-      menu?.classList.toggle("show");
-    };
-  });
-  document.querySelectorAll("[data-user-detail]").forEach((button) => {
-    button.onclick = () => openUserDetail(button.dataset.userDetail);
-  });
-  document.querySelectorAll("[data-user-tag]").forEach((button) => {
-    button.onclick = () => openUserTag(button.dataset.userTag);
-  });
 }
 
 function renderChats(db) {
@@ -282,10 +241,6 @@ function renderChats(db) {
       </article>
     `;
   }).join("");
-
-  document.querySelectorAll("[data-chat-detail]").forEach((button) => {
-    button.onclick = () => openAdminChat(button.dataset.chatDetail);
-  });
 }
 
 function openAdminChat(id) {
@@ -311,7 +266,7 @@ function renderAdminChatModal(db) {
   const chat = chats.find((item) => item.id === activeAdminChatId);
   if (!chat) return;
 
-  $("#adminChatScreenTitle").textContent = chat.customer?.name || "Cliente";
+  if ($("#adminChatScreenTitle")) $("#adminChatScreenTitle").textContent = chat.customer?.name || "Cliente";
   renderAdminChatAvatar(chat, db);
 
   const container = $("#adminChatMessages");
@@ -376,23 +331,25 @@ function markPresence(role, isActive = true) {
 
 function openChatImage(image, filename = "imagen-chat-la-lupita.jpg") {
   if (!image) return;
-  $("#chatImageViewerImage").src = image;
-  $("#chatImageDownload").href = image;
-  $("#chatImageDownload").download = filename;
-  $("#chatImageViewer").showModal();
+  if ($("#chatImageViewerImage")) $("#chatImageViewerImage").src = image;
+  if ($("#chatImageDownload")) {
+    $("#chatImageDownload").href = image;
+    $("#chatImageDownload").download = filename;
+  }
+  $("#chatImageViewer")?.showModal();
 }
 
 function closeChatImageViewer() {
   const viewer = $("#chatImageViewer");
   if (!viewer?.open) return;
   viewer.close();
-  $("#chatImageViewerImage").removeAttribute("src");
+  if ($("#chatImageViewerImage")) $("#chatImageViewerImage").removeAttribute("src");
 }
 
 function sendAdminChatMessage(event) {
-  event.preventDefault();
+  if (event) event.preventDefault();
   const input = $("#adminChatInput");
-  const text = input.value.trim();
+  const text = input ? input.value.trim() : "";
   const image = $("#adminChatImage")?.dataset.image || "";
   if ((!text && !image) || !activeAdminChatId) return;
 
@@ -412,7 +369,7 @@ function sendAdminChatMessage(event) {
   chat.updatedAt = now;
   saveDb(db);
 
-  input.value = "";
+  if (input) input.value = "";
   if ($("#adminChatImage")) {
     $("#adminChatImage").value = "";
     delete $("#adminChatImage").dataset.image;
@@ -429,22 +386,23 @@ function openUserDetail(phone) {
   const orders = db.orders.filter((order) => order.customer?.phone === phone);
   const quotes = db.quotes.filter((quote) => quote.customer?.phone === phone);
 
-  $("#userDetailContent").innerHTML = `
-    <button class="modal-close" id="closeUserDetail">×</button>
-    <p class="eyebrow">Detalles del perfil</p>
-    <div class="profile-top">
-      <div class="profile-photo">${customer.photo ? `<img src="${customer.photo}" alt="${escapeHtml(customer.name)}" />` : "👤"}</div>
-      <div>
-        <h2>${escapeHtml(customer.name)}</h2>
-        <p class="muted">${escapeHtml(customer.phone)}</p>
+  if ($("#userDetailContent")) {
+    $("#userDetailContent").innerHTML = `
+      <button class="modal-close" id="closeUserDetail">×</button>
+      <p class="eyebrow">Detalles del perfil</p>
+      <div class="profile-top">
+        <div class="profile-photo">${customer.photo ? `<img src="${customer.photo}" alt="${escapeHtml(customer.name)}" />` : "👤"}</div>
+        <div>
+          <h2>${escapeHtml(customer.name)}</h2>
+          <p class="muted">${escapeHtml(customer.phone)}</p>
+        </div>
       </div>
-    </div>
-    <div class="profile-detail"><span>Etiqueta</span><strong>${escapeHtml(customer.tag || "Cliente")}</strong></div>
-    <div class="profile-detail"><span>Pedidos</span><strong>${orders.length}</strong></div>
-    <div class="profile-detail"><span>Cotizaciones</span><strong>${quotes.length}</strong></div>
-  `;
-  $("#userDetailModal").showModal();
-  $("#closeUserDetail").onclick = () => $("#userDetailModal").close();
+      <div class="profile-detail"><span>Etiqueta</span><strong>${escapeHtml(customer.tag || "Cliente")}</strong></div>
+      <div class="profile-detail"><span>Pedidos</span><strong>${orders.length}</strong></div>
+      <div class="profile-detail"><span>Cotizaciones</span><strong>${quotes.length}</strong></div>
+    `;
+  }
+  $("#userDetailModal")?.showModal();
 }
 
 function openUserTag(phone) {
@@ -452,20 +410,20 @@ function openUserTag(phone) {
   const customer = db.customers.find((item) => item.phone === phone);
   if (!customer) return;
   pendingUserTagPhone = phone;
-  $("#userTagTitle").textContent = customer.name;
-  $("#userTagSelect").value = customer.tag || "Cliente";
-  $("#userTagModal").showModal();
+  if ($("#userTagTitle")) $("#userTagTitle").textContent = customer.name;
+  if ($("#userTagSelect")) $("#userTagSelect").value = customer.tag || "Cliente";
+  $("#userTagModal")?.showModal();
 }
 
 function saveUserTag(event) {
-  event.preventDefault();
+  if (event) event.preventDefault();
   if (!pendingUserTagPhone) return;
   const db = loadDb();
   const updatedAt = new Date().toISOString();
-  db.customers = db.customers.map((customer) => customer.phone === pendingUserTagPhone ? { ...customer, tag: $("#userTagSelect").value, updatedAt } : customer);
+  db.customers = db.customers.map((customer) => customer.phone === pendingUserTagPhone ? { ...customer, tag: $("#userTagSelect")?.value || "Cliente", updatedAt } : customer);
   saveDb(db);
   pendingUserTagPhone = "";
-  $("#userTagModal").close();
+  $("#userTagModal")?.close();
   renderAdmin();
   showAdminToast("Etiqueta guardada.");
 }
@@ -517,9 +475,9 @@ function renderReport(db) {
   const totalRevenue = selectedOrders.reduce((sum, order) => sum + orderAmount(order), 0);
   const totalQty = Object.values(productTotals).reduce((sum, item) => sum + item.qty, 0);
 
-  $("#reportPeriodLabel").textContent = labels[reportPeriod] || "Hoy";
-  $("#reportPeriodTotal").textContent = money(totalRevenue);
-  $("#reportPeriodCount").textContent = `${totalQty} productos vendidos`;
+  if ($("#reportPeriodLabel")) $("#reportPeriodLabel").textContent = labels[reportPeriod] || "Hoy";
+  if ($("#reportPeriodTotal")) $("#reportPeriodTotal").textContent = money(totalRevenue);
+  if ($("#reportPeriodCount")) $("#reportPeriodCount").textContent = `${totalQty} productos vendidos`;
   document.querySelectorAll("[data-report-period]").forEach((button) => button.classList.toggle("active", button.dataset.reportPeriod === reportPeriod));
 
   const items = Object.entries(productTotals).sort((a, b) => b[1].qty - a[1].qty);
@@ -535,26 +493,22 @@ function openOrderDetail(id) {
   const isCompleted = order.status === "Completado";
   const itemsHtml = (order.items || []).map((item) => `<li>${item.quantity} x ${escapeHtml(item.name)} (${money(item.quantity * item.price)})</li>`).join("");
 
-  $("#orderDetailContent").innerHTML = `
-    <button class="modal-close" id="closeOrderDetail">×</button>
-    <p class="eyebrow">Detalles del pedido</p>
-    <h2>Pedido #${escapeHtml(order.id)}</h2>
-    <p class="muted">${escapeHtml(order.customer?.name || "Cliente")} · ${escapeHtml(order.customer?.phone || "")}</p>
-    <ul class="order-items detail-items">${itemsHtml}</ul>
-    <div class="profile-detail"><span>Hora de recoger</span><strong>${escapeHtml(order.pickupTime || "")}</strong></div>
-    <div class="profile-detail"><span>Total</span><strong>${money(order.total)}</strong></div>
-    <div class="profile-detail order-status-detail ${isCompleted ? "status-completed" : "status-pending"}"><span>Estado</span><strong>${escapeHtml(order.status)}</strong></div>
-    <button class="small-action ${isCompleted ? "completed" : ""}" id="detailCompleteOrder" ${isCompleted ? "disabled" : ""}>
-      ${isCompleted ? "Completado" : "Marcar completado"}
-    </button>
-  `;
-  $("#orderDetailModal").showModal();
-  $("#closeOrderDetail").onclick = () => $("#orderDetailModal").close();
-  $("#detailCompleteOrder").onclick = () => {
-    if (order.status === "Completado") return;
-    updateOrderStatus(order.id, "Completado");
-    $("#orderDetailModal").close();
-  };
+  if ($("#orderDetailContent")) {
+    $("#orderDetailContent").innerHTML = `
+      <button class="modal-close" id="closeOrderDetail">×</button>
+      <p class="eyebrow">Detalles del pedido</p>
+      <h2>Pedido #${escapeHtml(order.id)}</h2>
+      <p class="muted">${escapeHtml(order.customer?.name || "Cliente")} · ${escapeHtml(order.customer?.phone || "")}</p>
+      <ul class="order-items detail-items">${itemsHtml}</ul>
+      <div class="profile-detail"><span>Hora de recoger</span><strong>${escapeHtml(order.pickupTime || "")}</strong></div>
+      <div class="profile-detail"><span>Total</span><strong>${money(order.total)}</strong></div>
+      <div class="profile-detail order-status-detail ${isCompleted ? "status-completed" : "status-pending"}"><span>Estado</span><strong>${escapeHtml(order.status)}</strong></div>
+      <button class="small-action ${isCompleted ? "completed" : ""}" id="detailCompleteOrder" ${isCompleted ? "disabled" : ""}>
+        ${isCompleted ? "Completado" : "Marcar completado"}
+      </button>
+    `;
+  }
+  $("#orderDetailModal")?.showModal();
 }
 
 function openQuoteDetail(id) {
@@ -562,23 +516,23 @@ function openQuoteDetail(id) {
   const quote = db.quotes.find((item) => item.id === id);
   if (!quote) return;
 
-  $("#quoteDetailContent").innerHTML = `
-    <button class="modal-close" id="closeQuoteDetail">×</button>
-    <p class="eyebrow">Detalles de cotización</p>
-    <h2>Cotización</h2>
-    <p class="muted">${escapeHtml(quote.customer?.name || "Cliente")} · ${escapeHtml(quote.customer?.phone || "")}</p>
-    <div class="quote-spec-card quote-detail-spec">
-      <b>Especificaciones</b>
-      <p><strong>${escapeHtml(quote.product || "")}</strong></p>
-      <p>${escapeHtml(quote.notes || "")}</p>
-    </div>
-    <div class="profile-detail"><span>Hora</span><strong>${escapeHtml(quote.pickupTime || "")}</strong></div>
-    <div class="profile-detail"><span>Estado</span><strong>${escapeHtml(quote.status || "")}</strong></div>
-    ${quote.image ? `<button class="quote-image detail-quote-image quote-image-open" id="openQuoteImage" type="button" aria-label="Abrir imagen de referencia"><img src="${escapeHtml(quote.image)}" alt="Referencia de cotización" /><span class="quote-image-open-icon material-symbols-rounded">open_in_full</span></button>` : `<div class="empty">Sin imagen de referencia.</div>`}
-  `;
-  $("#quoteDetailModal").showModal();
-  $("#closeQuoteDetail").onclick = () => $("#quoteDetailModal").close();
-  $("#openQuoteImage")?.addEventListener("click", () => openChatImage(quote.image, "referencia-cotizacion.jpg"));
+  if ($("#quoteDetailContent")) {
+    $("#quoteDetailContent").innerHTML = `
+      <button class="modal-close" id="closeQuoteDetail">×</button>
+      <p class="eyebrow">Detalles de cotización</p>
+      <h2>Cotización</h2>
+      <p class="muted">${escapeHtml(quote.customer?.name || "Cliente")} · ${escapeHtml(quote.customer?.phone || "")}</p>
+      <div class="quote-spec-card quote-detail-spec">
+        <b>Especificaciones</b>
+        <p><strong>${escapeHtml(quote.product || "")}</strong></p>
+        <p>${escapeHtml(quote.notes || "")}</p>
+      </div>
+      <div class="profile-detail"><span>Hora</span><strong>${escapeHtml(quote.pickupTime || "")}</strong></div>
+      <div class="profile-detail"><span>Estado</span><strong>${escapeHtml(quote.status || "")}</strong></div>
+      ${quote.image ? `<button class="quote-image detail-quote-image quote-image-open" id="openQuoteImage" type="button" aria-label="Abrir imagen de referencia"><img src="${escapeHtml(quote.image)}" alt="Referencia de cotización" /><span class="quote-image-open-icon material-symbols-rounded">open_in_full</span></button>` : `<div class="empty">Sin imagen de referencia.</div>`}
+    `;
+  }
+  $("#quoteDetailModal")?.showModal();
 }
 
 function updateOrderStatus(id, status) {
@@ -619,8 +573,8 @@ function openDeleteProduct(id) {
   const product = db.products.find((item) => item.id === id);
   if (!product) return;
   pendingDeleteProductId = id;
-  $("#deleteProductText").textContent = `¿Seguro que quieres eliminar "${product.name}" del catálogo?`;
-  $("#deleteProductModal").showModal();
+  if ($("#deleteProductText")) $("#deleteProductText").textContent = `¿Seguro que quieres eliminar "${product.name}" del catálogo?`;
+  $("#deleteProductModal")?.showModal();
 }
 
 function deleteProduct() {
@@ -629,13 +583,13 @@ function deleteProduct() {
   db.products = db.products.filter((product) => product.id !== pendingDeleteProductId);
   saveDb(db);
   pendingDeleteProductId = null;
-  $("#deleteProductModal").close();
+  $("#deleteProductModal")?.close();
   renderAdmin();
   showAdminToast("Producto eliminado.");
 }
 
 function readImage(input, callback, options = {}) {
-  const file = input.files?.[0];
+  const file = input?.files?.[0];
   if (!file) return;
   const reader = new FileReader();
   reader.onload = () => {
@@ -657,8 +611,8 @@ function readImage(input, callback, options = {}) {
 
 function saveProduct() {
   const name = $("#productName")?.value.trim();
-  const category = $("#productCategory")?.value;
-  const price = Number($("#productPrice")?.value);
+  const category = $("#productCategory")?.value || "dulce";
+  const price = Number($("#productPrice")?.value || 0);
   const stock = Number($("#productStock")?.value || 0);
   const desc = $("#productDesc")?.value.trim();
 
@@ -702,89 +656,32 @@ function openEditProduct(id) {
   if (!product) return;
   editProductId = id;
   editProductImage = product.image || "";
-  $("#editTitle").textContent = product.name;
-  $("#editPrice").value = product.price;
-  $("#editStock").value = product.stock;
-  $("#editDesc").value = product.desc;
-  $("#editImage").value = "";
-  $("#editProductModal").showModal();
+  if ($("#editTitle")) $("#editTitle").textContent = product.name;
+  if ($("#editPrice")) $("#editPrice").value = product.price;
+  if ($("#editStock")) $("#editStock").value = product.stock;
+  if ($("#editDesc")) $("#editDesc").value = product.desc;
+  if ($("#editImage")) $("#editImage").value = "";
+  $("#editProductModal")?.showModal();
 }
 
 function saveEditProduct(event) {
-  event.preventDefault();
+  if (event) event.preventDefault();
   const db = loadDb();
   db.products = db.products.map((product) => {
     if (product.id !== editProductId) return product;
     return {
       ...product,
-      price: Number($("#editPrice").value),
-      stock: Math.max(0, Number($("#editStock").value)),
-      desc: $("#editDesc").value.trim(),
+      price: Number($("#editPrice")?.value || product.price),
+      stock: Math.max(0, Number($("#editStock")?.value || 0)),
+      desc: $("#editDesc")?.value.trim() || product.desc,
       image: editProductImage,
       updatedAt: new Date().toISOString()
     };
   });
   saveDb(db);
-  $("#editProductModal").close();
+  $("#editProductModal")?.close();
   renderAdmin();
   showAdminToast("Cambios guardados.");
-}
-
-function setupSwipeNavigation(screenOrder) {
-  const app = document.querySelector(".phone-app");
-  if (!app) return;
-  let startX = 0;
-  let startY = 0;
-
-  app.addEventListener("touchstart", (event) => {
-    if (document.querySelector("dialog[open]")) return;
-    startX = event.touches[0].clientX;
-    startY = event.touches[0].clientY;
-  }, { passive: true });
-
-  app.addEventListener("touchend", (event) => {
-    if (!startX || document.querySelector("dialog[open]")) return;
-    const activeScreen = document.querySelector(".mobile-screen.active")?.id;
-    const index = screenOrder.indexOf(activeScreen);
-    if (index < 0) return;
-
-    const endX = event.changedTouches[0].clientX;
-    const endY = event.changedTouches[0].clientY;
-    const diffX = endX - startX;
-    const diffY = endY - startY;
-    startX = 0;
-    startY = 0;
-
-    if (Math.abs(diffX) < 70 || Math.abs(diffX) < Math.abs(diffY) * 1.4) return;
-    const nextIndex = diffX < 0 ? index + 1 : index - 1;
-    if (screenOrder[nextIndex]) go(screenOrder[nextIndex]);
-  }, { passive: true });
-}
-
-function handleBackNavigation() {
-  const openDialog = document.querySelector("dialog[open]");
-  if (openDialog) {
-    openDialog.close();
-    return;
-  }
-  const activeScreen = document.querySelector(".mobile-screen.active")?.id;
-  if (activeScreen && activeScreen !== "adminInicio") go("adminInicio");
-}
-
-function setupPhoneBackButton() {
-  const appPlugin = window.Capacitor?.Plugins?.App;
-  if (appPlugin?.addListener) {
-    appPlugin.addListener("backButton", () => {
-      handleBackNavigation();
-    });
-  }
-
-  history.replaceState({ screen: "app" }, "");
-  history.pushState({ screen: "app-lock" }, "");
-  window.addEventListener("popstate", () => {
-    handleBackNavigation();
-    history.pushState({ screen: "app-lock" }, "");
-  });
 }
 
 function openAdminMenu() {
@@ -795,115 +692,276 @@ function closeAdminMenu() {
   $("#adminMenuModal")?.close();
 }
 
-// Global Event Binds
-document.querySelectorAll("[data-go]").forEach((button) => {
-  button.addEventListener("click", () => go(button.dataset.go));
-});
+// Global Bulletproof Event Delegation
+document.addEventListener("click", (event) => {
+  const target = event.target;
+  if (!target) return;
 
-$("#adminMenuBtn")?.addEventListener("click", openAdminMenu);
-document.querySelectorAll("[data-menu-open]").forEach((button) => {
-  button.addEventListener("click", openAdminMenu);
-});
+  // data-go
+  const goBtn = target.closest("[data-go]");
+  if (goBtn) {
+    event.preventDefault();
+    go(goBtn.dataset.go);
+    return;
+  }
 
-document.querySelectorAll("[data-menu-go]").forEach((button) => {
-  button.addEventListener("click", () => {
+  // menu open
+  const menuOpenBtn = target.closest("[data-menu-open]") || target.closest("#adminMenuBtn");
+  if (menuOpenBtn) {
+    event.preventDefault();
+    openAdminMenu();
+    return;
+  }
+
+  // menu go
+  const menuGoBtn = target.closest("[data-menu-go]");
+  if (menuGoBtn) {
+    event.preventDefault();
     closeAdminMenu();
-    go(button.dataset.menuGo);
-  });
-});
+    go(menuGoBtn.dataset.menuGo);
+    return;
+  }
 
-const safeBind = (sel, evt, fn) => {
-  const el = typeof sel === "string" ? $(sel) : sel;
-  if (el) el[evt] = fn;
-};
+  // close admin menu
+  if (target.closest("#closeAdminMenu") || target === $("#adminMenuModal")) {
+    event.preventDefault();
+    closeAdminMenu();
+    return;
+  }
 
-const safeEvt = (sel, evt, fn, opts) => {
-  const el = typeof sel === "string" ? $(sel) : sel;
-  if (el) el.addEventListener(evt, fn, opts);
-};
+  // Order Detail
+  const orderDetailBtn = target.closest("[data-order-detail]");
+  if (orderDetailBtn) {
+    event.preventDefault();
+    openOrderDetail(orderDetailBtn.dataset.orderDetail);
+    return;
+  }
 
-safeBind("#closeAdminMenu", "onclick", closeAdminMenu);
-safeEvt("#adminMenuModal", "click", (event) => {
-  if (event.target === $("#adminMenuModal")) closeAdminMenu();
-});
+  if (target.closest("#closeOrderDetail")) {
+    event.preventDefault();
+    $("#orderDetailModal")?.close();
+    return;
+  }
 
-safeBind("#adminChatForm", "onsubmit", sendAdminChatMessage);
-safeBind("#productImage", "onchange", () => readImage($("#productImage"), (image) => {
-  newProductImage = image;
-  if ($("#productImagePreview")) $("#productImagePreview").innerHTML = `<img src="${image}" alt="Vista previa" />`;
-  $("#productUploadTile")?.classList.add("has-image");
-}, { maxSize: 1000, quality: 0.78 }));
+  if (target.closest("#detailCompleteOrder")) {
+    event.preventDefault();
+    const modalContent = $("#orderDetailContent");
+    const match = modalContent?.innerHTML.match(/Pedido #([A-Za-z0-9_-]+)/);
+    if (match?.[1]) {
+      updateOrderStatus(match[1], "Completado");
+      $("#orderDetailModal")?.close();
+    }
+    return;
+  }
 
-safeBind("#editImage", "onchange", () => readImage($("#editImage"), (image) => {
-  editProductImage = image;
-}, { maxSize: 1000, quality: 0.78 }));
+  // Product Actions
+  const editProductBtn = target.closest("[data-edit-product]");
+  if (editProductBtn) {
+    event.preventDefault();
+    openEditProduct(Number(editProductBtn.dataset.editProduct));
+    return;
+  }
 
-safeBind("#adminChatImage", "onchange", () => readImage($("#adminChatImage"), (image) => {
-  if ($("#adminChatImage")) $("#adminChatImage").dataset.image = image;
-  showAdminToast("Imagen lista para enviar.");
-}, { maxSize: 1000, quality: 0.78 }));
+  const dailyProductBtn = target.closest("[data-daily-product]");
+  if (dailyProductBtn) {
+    event.preventDefault();
+    setDailyProduct(Number(dailyProductBtn.dataset.dailyProduct));
+    return;
+  }
 
-safeEvt("#adminChatMessages", "click", (event) => {
-  const image = event.target.closest("[data-chat-image]");
-  if (image) openChatImage(image.dataset.chatImage, image.dataset.chatName);
-});
+  const toggleProductBtn = target.closest("[data-toggle-product]");
+  if (toggleProductBtn) {
+    event.preventDefault();
+    toggleProduct(Number(toggleProductBtn.dataset.toggleProduct));
+    return;
+  }
 
-safeBind("#closeChatImageViewer", "onclick", closeChatImageViewer);
-safeEvt("#chatImageViewer", "click", (event) => {
-  if (event.target === $("#chatImageViewer")) closeChatImageViewer();
-});
+  const deleteProductBtn = target.closest("[data-delete-product]");
+  if (deleteProductBtn) {
+    event.preventDefault();
+    openDeleteProduct(Number(deleteProductBtn.dataset.deleteProduct));
+    return;
+  }
 
-safeBind("#saveProduct", "onclick", saveProduct);
-safeBind("#saveEditProduct", "onclick", saveEditProduct);
-safeBind("#closeEditProduct", "onclick", (event) => {
-  event.preventDefault();
-  $("#editProductModal")?.close();
-});
+  if (target.closest("#saveProduct")) {
+    event.preventDefault();
+    saveProduct();
+    return;
+  }
 
-safeBind("#confirmDeleteProduct", "onclick", (event) => {
-  event.preventDefault();
-  deleteProduct();
-});
+  if (target.closest("#saveEditProduct")) {
+    event.preventDefault();
+    saveEditProduct(event);
+    return;
+  }
 
-safeBind("#cancelDeleteProduct", "onclick", (event) => {
-  event.preventDefault();
-  pendingDeleteProductId = null;
-  $("#deleteProductModal")?.close();
-});
+  if (target.closest("#closeEditProduct")) {
+    event.preventDefault();
+    $("#editProductModal")?.close();
+    return;
+  }
 
-document.querySelectorAll("[data-report-period]").forEach((button) => {
-  button.onclick = () => {
-    reportPeriod = button.dataset.reportPeriod;
+  if (target.closest("#confirmDeleteProduct")) {
+    event.preventDefault();
+    deleteProduct();
+    return;
+  }
+
+  if (target.closest("#cancelDeleteProduct")) {
+    event.preventDefault();
+    pendingDeleteProductId = null;
+    $("#deleteProductModal")?.close();
+    return;
+  }
+
+  // Quote Actions
+  const quoteDetailBtn = target.closest("[data-quote-detail]");
+  if (quoteDetailBtn) {
+    event.preventDefault();
+    openQuoteDetail(quoteDetailBtn.dataset.quoteDetail);
+    return;
+  }
+
+  const completeQuoteBtn = target.closest("[data-complete-quote]");
+  if (completeQuoteBtn && !completeQuoteBtn.disabled) {
+    event.preventDefault();
+    updateQuoteStatus(completeQuoteBtn.dataset.completeQuote, "Completado");
+    return;
+  }
+
+  if (target.closest("#closeQuoteDetail")) {
+    event.preventDefault();
+    $("#quoteDetailModal")?.close();
+    return;
+  }
+
+  if (target.closest("#openQuoteImage")) {
+    event.preventDefault();
+    const img = $("#quoteDetailContent img");
+    if (img?.src) openChatImage(img.src, "referencia-cotizacion.jpg");
+    return;
+  }
+
+  // User Actions
+  const userMenuBtn = target.closest("[data-user-menu]");
+  if (userMenuBtn) {
+    event.preventDefault();
+    const phone = userMenuBtn.dataset.userMenu;
+    document.querySelectorAll(".user-menu.show").forEach((menu) => {
+      if (menu.id !== `userMenu-${cleanId(phone)}`) menu.classList.remove("show");
+    });
+    const menu = $(`#userMenu-${cleanId(phone)}`);
+    menu?.classList.toggle("show");
+    return;
+  }
+
+  const userDetailBtn = target.closest("[data-user-detail]");
+  if (userDetailBtn) {
+    event.preventDefault();
+    openUserDetail(userDetailBtn.dataset.userDetail);
+    return;
+  }
+
+  if (target.closest("#closeUserDetail")) {
+    event.preventDefault();
+    $("#userDetailModal")?.close();
+    return;
+  }
+
+  const userTagBtn = target.closest("[data-user-tag]");
+  if (userTagBtn) {
+    event.preventDefault();
+    openUserTag(userTagBtn.dataset.userTag);
+    return;
+  }
+
+  if (target.closest("#saveUserTag")) {
+    event.preventDefault();
+    saveUserTag(event);
+    return;
+  }
+
+  if (target.closest("#closeUserTag")) {
+    event.preventDefault();
+    pendingUserTagPhone = "";
+    $("#userTagModal")?.close();
+    return;
+  }
+
+  // Report Period Tabs
+  const reportTab = target.closest("[data-report-period]");
+  if (reportTab) {
+    event.preventDefault();
+    reportPeriod = reportTab.dataset.reportPeriod;
     renderReport(loadDb());
-  };
+    return;
+  }
+
+  // Chat Actions
+  const chatDetailBtn = target.closest("[data-chat-detail]");
+  if (chatDetailBtn) {
+    event.preventDefault();
+    openAdminChat(chatDetailBtn.dataset.chatDetail);
+    return;
+  }
+
+  const chatImageBtn = target.closest("[data-chat-image]");
+  if (chatImageBtn) {
+    event.preventDefault();
+    openChatImage(chatImageBtn.dataset.chatImage, chatImageBtn.dataset.chatName);
+    return;
+  }
+
+  if (target.closest("#closeChatImageViewer") || target === $("#chatImageViewer")) {
+    event.preventDefault();
+    closeChatImageViewer();
+    return;
+  }
 });
 
-safeBind("#saveUserTag", "onclick", saveUserTag);
-safeBind("#closeUserTag", "onclick", (event) => {
-  event.preventDefault();
-  pendingUserTagPhone = "";
-  $("#userTagModal")?.close();
+// File inputs change handlers
+document.addEventListener("change", (event) => {
+  const target = event.target;
+  if (target.id === "productImage") {
+    readImage(target, (image) => {
+      newProductImage = image;
+      if ($("#productImagePreview")) $("#productImagePreview").innerHTML = `<img src="${image}" alt="Vista previa" />`;
+      $("#productUploadTile")?.classList.add("has-image");
+    }, { maxSize: 1000, quality: 0.78 });
+  } else if (target.id === "editImage") {
+    readImage(target, (image) => {
+      editProductImage = image;
+    }, { maxSize: 1000, quality: 0.78 });
+  } else if (target.id === "adminChatImage") {
+    readImage(target, (image) => {
+      if ($("#adminChatImage")) $("#adminChatImage").dataset.image = image;
+      showAdminToast("Imagen lista para enviar.");
+    }, { maxSize: 1000, quality: 0.78 });
+  }
+});
+
+// Chat Form submit
+document.addEventListener("submit", (event) => {
+  if (event.target.id === "adminChatForm") {
+    sendAdminChatMessage(event);
+  }
 });
 
 window.addEventListener("focus", renderAdmin);
 window.addEventListener("storage", renderAdmin);
 window.addEventListener("la-lupita-db-updated", renderAdmin);
-window.addEventListener("la-lupita-notification-route", (event) => openAdminNotificationRoute(event.detail?.route || ""));
 
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) markPresence("admin", false);
   else {
     markPresence("admin");
-    if (window.refreshCloudData) window.refreshCloudData();
+    if (typeof window.refreshCloudData === "function") window.refreshCloudData();
   }
 });
 
 window.addEventListener("pagehide", () => markPresence("admin", false));
-setInterval(() => { if (window.refreshCloudData) window.refreshCloudData(); }, 5000);
+setInterval(() => { if (typeof window.refreshCloudData === "function") window.refreshCloudData(); }, 5000);
 setInterval(() => { if (!document.hidden) markPresence("admin"); }, 9000);
-
-setupSwipeNavigation(["adminInicio", "adminCotizaciones", "adminChats", "adminProductos"]);
-setupPhoneBackButton();
 
 if (window.LaLupitaNotifications) window.LaLupitaNotifications.init("admin");
 
