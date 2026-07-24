@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160">
+  <rect width="160" height="160" rx="40" fill="#E83E8C"/>
+  <circle cx="80" cy="76" r="48" fill="#FFF4C7"/>
+  <path d="M39 92c12-31 70-31 82 0 4 10-3 21-14 21H53c-11 0-18-11-14-21Z" fill="#F39A20"/>
+  <path d="M57 81c5-12 13-18 23-18s18 6 23 18" fill="none" stroke="#7A3F15" stroke-width="7" stroke-linecap="round"/>
+  <text x="80" y="137" text-anchor="middle" font-family="Arial, sans-serif" font-size="19" font-weight="800" fill="#fff">LA LUPITA</text>
+</svg>

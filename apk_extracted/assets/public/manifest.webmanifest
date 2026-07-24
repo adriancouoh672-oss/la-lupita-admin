@@ -1,0 +1,25 @@
+{
+  "id": "/la-lupita-admin",
+  "name": "La Lupita Admin",
+  "short_name": "Lupita Admin",
+  "description": "App para administrar productos, pedidos y cotizaciones.",
+  "start_url": "dueno.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#FFF8F7",
+  "theme_color": "#246B63",
+  "icons": [
+    {
+      "src": "assets/icon-admin-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "assets/icon-admin.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

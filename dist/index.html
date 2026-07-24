@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#246B63" />
+    <title>Dueno - La Lupita</title>
+    <link rel="manifest" href="/assets/manifest-admin-CyIGovmD.webmanifest" />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,400,0,0" />
+    <link rel="stylesheet" crossorigin href="/assets/index-BCkv70Z0.css">
+  </head>
+  <body>
+    <main class="phone-app admin-theme login-active">
+      <section class="mobile-screen active" id="adminLogin">
+        <article class="login-screen">
+          <img src="/assets/logo-lupita-nuevo-DH4Knzxb.jpeg" alt="La Lupita" />
+          <p class="eyebrow">Acceso del administrador</p>
+          <h1>Panaderia La Lupita</h1>
+          <p class="muted">Solo el dueno o administrador autorizado puede entrar.</p>
+          <label>Usuario<input id="adminUser" placeholder="Usuario" autocomplete="username" /></label>
+          <label>Contrasena<input id="adminPassword" type="password" placeholder="Contrasena" autocomplete="current-password" /></label>
+          <p class="form-error" id="adminLoginError"></p>
+          <button class="filled full" id="adminLoginBtn">Entrar</button>
+        </article>
+      </section>
+
+      <section class="mobile-screen" id="adminInicio">
+        <header class="appbar">
+          <img src="/assets/logo-lupita-nuevo-DH4Knzxb.jpeg" alt="La Lupita" />
+          <div>
+            <h1>Administrar</h1>
+          </div>
+          <button class="menu-button" id="adminMenuBtn" aria-label="Menu administrativo">&#9776;</button>
+        </header>
+
+        <section class="section-title">
+          <h2>Pedidos recientes</h2>
+          <p>Pedidos enviados desde la app del cliente</p>
+        </section>
+        <div class="admin-list" id="adminOrders"></div>
+      </section>
+
+      <section class="mobile-screen" id="adminProductos">
+        <header class="simplebar"><button class="ghost" data-go="adminInicio">&#8592; Volver</button><button class="menu-button" data-menu-open aria-label="Menu administrativo">&#9776;</button></header>
+        <section class="section-title">
+          <h2>Productos</h2>
+          <p>Administra disponibilidad, precio y piezas</p>
+        </section>
+        <div class="admin-list" id="adminProducts"></div>
+      </section>
+
+      <section class="mobile-screen" id="adminAgregar">
+        <header class="simplebar"><button class="ghost" data-go="adminInicio">&#8592; Volver</button><button class="menu-button" data-menu-open aria-label="Menu administrativo">&#9776;</button></header>
+        <article class="panel">
+          <p class="eyebrow">Nuevo producto</p>
+          <h2>Anadir pan o postre</h2>
+          <label class="upload-tile upload-square product-upload" id="productUploadTile" for="productImage">
+            <input id="productImage" type="file" accept="image/*" />
+            <span id="productImagePreview">+</span>
+            <strong>Agregar foto</strong>
+          </label>
+          <label>Nombre<input id="productName" placeholder="Ej. Dona de chocolate" /></label>
+          <label>Categoria<select id="productCategory"><option value="dulce">Pan dulce</option><option value="salado">Pan salado</option><option value="postres">Postres</option><option value="bebidas">Bebidas</option></select></label>
+          <label>Precio<input id="productPrice" type="number" placeholder="15" /></label>
+          <label>Piezas iniciales<input id="productStock" type="number" placeholder="20" /></label>
+          <label>Descripcion<textarea id="productDesc" rows="4" placeholder="Descripcion breve para clientes"></textarea></label>
+          <button class="filled full" id="saveProduct">Guardar producto</button>
+        </article>
+      </section>
+
+      <section class="mobile-screen" id="adminCotizaciones">
+        <header class="simplebar"><button class="ghost" data-go="adminInicio">&#8592; Volver</button><button class="menu-button" data-menu-open aria-label="Menu administrativo">&#9776;</button></header>
+        <section class="section-title">
+          <h2>Cotizaciones</h2>
+          <p>Solicitudes personalizadas de los clientes</p>
+        </section>
+        <div class="admin-list" id="adminQuotes"></div>
+      </section>
+
+      <section class="mobile-screen" id="adminUsuarios">
+        <header class="simplebar"><button class="ghost" data-go="adminInicio">&#8592; Volver</button><button class="menu-button" data-menu-open aria-label="Menu administrativo">&#9776;</button></header>
+        <section class="section-title">
+          <h2>Usuarios registrados</h2>
+          <p>Perfiles creados desde la app del cliente</p>
+        </section>
+        <div class="admin-list" id="adminUsers"></div>
+      </section>
+
+      <section class="mobile-screen" id="adminResumen">
+        <header class="simplebar"><button class="ghost" data-go="adminInicio">&#8592; Volver</button><button class="menu-button" data-menu-open aria-label="Menu administrativo">&#9776;</button></header>
+        <section class="section-title">
+          <h2>Resumen de ventas</h2>
+          <p>Historial rapido de pedidos y productos</p>
+        </section>
+        <nav class="period-tabs" id="reportTabs">
+          <button class="active" data-report-period="today">Hoy</button>
+          <button data-report-period="week">1 semana</button>
+          <button data-report-period="month">1 mes</button>
+        </nav>
+        <article class="report-summary">
+          <span id="reportPeriodLabel">Hoy</span>
+          <strong id="reportPeriodTotal">$0</strong>
+          <small id="reportPeriodCount">0 productos vendidos</small>
+        </article>
+        <div class="admin-list" id="adminReport"></div>
+      </section>
+
+      <section class="mobile-screen" id="adminChats">
+        <header class="simplebar"><button class="ghost" data-go="adminInicio">&#8592; Volver</button><button class="menu-button" data-menu-open aria-label="Menu administrativo">&#9776;</button></header>
+        <section class="section-title">
+          <h2>Chats de clientes</h2>
+          <p>Mensajes enviados desde la app del cliente</p>
+        </section>
+        <div class="admin-list" id="adminChatsList"></div>
+      </section>
+
+      <section class="mobile-screen admin-chat-screen chat-screen" id="adminChatScreen">
+        <article class="chat-panel">
+          <header class="wa-chat-header">
+            <button class="wa-back" data-go="adminChats" type="button" aria-label="Volver"><span class="material-symbols-rounded">arrow_back</span></button>
+            <span class="wa-avatar" id="adminChatAvatar"><span class="material-symbols-rounded">person</span></span>
+            <div>
+              <h2 id="adminChatScreenTitle">Cliente</h2>
+              <p id="adminChatStatus"></p>
+            </div>
+          </header>
+          <div class="chat-messages" id="adminChatMessages"></div>
+          <form class="chat-compose" id="adminChatForm">
+            <label class="chat-attach" for="adminChatImage" aria-label="Adjuntar foto"><span class="material-symbols-rounded">add_photo_alternate</span><input id="adminChatImage" type="file" accept="image/*" /></label>
+            <input id="adminChatInput" placeholder="Responder mensaje" autocomplete="off" />
+            <button class="filled wa-send" id="adminChatSend" type="submit" aria-label="Enviar mensaje"><span class="material-symbols-rounded">send</span></button>
+          </form>
+        </article>
+      </section>
+
+      <nav class="bottom-nav">
+        <button class="nav" data-go="adminInicio"><span class="ui-icon nav-home material-symbols-rounded">shopping_basket</span><span>Pedidos</span></button>
+        <button class="nav" data-go="adminCotizaciones"><span class="ui-icon nav-quotes material-symbols-rounded">cake</span><span>Cotizaciones</span></button>
+        <button class="nav" data-go="adminChats"><span class="ui-icon nav-chat material-symbols-rounded">forum</span><span>Chat</span></button>
+        <button class="nav" data-go="adminProductos"><span class="ui-icon nav-products material-symbols-rounded">bakery_dining</span><span>Productos</span></button>
+      </nav>
+
+      <dialog class="client-menu-dialog admin-drawer-dialog" id="adminMenuModal">
+        <aside class="client-menu-panel admin-drawer-panel">
+          <button class="modal-close client-menu-close" id="closeAdminMenu" type="button">&times;</button>
+          <div class="client-menu-profile">
+            <span class="client-menu-photo admin-menu-photo"><img src="/assets/logo-lupita-nuevo-DH4Knzxb.jpeg" alt="La Lupita" /></span>
+            <strong>La Lupita Admin</strong>
+            <small>Panel del dueno</small>
+          </div>
+          <nav class="client-menu-options" aria-label="Menu administrativo">
+            <button data-menu-go="adminAgregar" type="button"><span>+</span><strong>Agregar producto</strong><em>&#8250;</em></button>
+            <button data-menu-go="adminUsuarios" type="button"><span>&#128101;</span><strong>Usuarios registrados</strong><em>&#8250;</em></button>
+            <button data-menu-go="adminResumen" type="button"><span>&#9719;</span><strong>Resumen de ventas</strong><em>&#8250;</em></button>
+          </nav>
+          <button class="menu-logout" id="adminLogoutBtn" type="button">Cerrar sesion</button>
+        </aside>
+      </dialog>
+
+      <dialog class="edit-modal" id="userDetailModal">
+        <article class="panel" id="userDetailContent"></article>
+      </dialog>
+
+      <dialog class="edit-modal" id="orderDetailModal">
+        <article class="panel" id="orderDetailContent"></article>
+      </dialog>
+
+      <dialog class="edit-modal" id="quoteDetailModal">
+        <article class="panel" id="quoteDetailContent"></article>
+      </dialog>
+
+      <dialog class="edit-modal" id="userTagModal">
+        <form method="dialog" class="panel">
+          <p class="eyebrow">Etiqueta de usuario</p>
+          <h2 id="userTagTitle">Cliente</h2>
+          <label>Etiqueta<select id="userTagSelect"><option value="Cliente">Cliente</option><option value="Cliente frecuente">Cliente frecuente</option><option value="Vendedor">Vendedor</option></select></label>
+          <button class="filled full" id="saveUserTag">Guardar etiqueta</button>
+          <button class="outline full" id="closeUserTag">Cancelar</button>
+        </form>
+      </dialog>
+
+      <dialog class="edit-modal" id="editProductModal">
+        <form method="dialog" class="panel">
+          <p class="eyebrow">Editar producto</p>
+          <h2 id="editTitle">Producto</h2>
+          <label>Precio<input id="editPrice" type="number" /></label>
+          <label>Existencias<input id="editStock" type="number" /></label>
+          <label>Descripcion<textarea id="editDesc" rows="4"></textarea></label>
+          <label>Foto del producto<input id="editImage" type="file" accept="image/*" /></label>
+          <button class="filled full" id="saveEditProduct">Guardar cambios</button>
+          <button class="outline full" id="closeEditProduct">Cancelar</button>
+        </form>
+      </dialog>
+
+      <dialog class="edit-modal" id="deleteProductModal">
+        <form method="dialog" class="panel">
+          <p class="eyebrow">Confirmar eliminacion</p>
+          <h2>Eliminar producto</h2>
+          <p class="muted" id="deleteProductText">Esta accion quitara el producto del catalogo.</p>
+          <button class="danger full" id="confirmDeleteProduct">Eliminar producto</button>
+          <button class="outline full" id="cancelDeleteProduct">Cancelar</button>
+        </form>
+      </dialog>
+      <dialog class="chat-image-viewer" id="chatImageViewer" aria-label="Vista previa de imagen">
+        <article class="chat-image-viewer-content">
+          <header class="chat-image-viewer-bar">
+            <button class="viewer-icon-button" id="closeChatImageViewer" type="button" aria-label="Cerrar imagen"><span class="material-symbols-rounded">close</span></button>
+            <a class="viewer-download" id="chatImageDownload" download="imagen-chat-la-lupita.jpg"><span class="material-symbols-rounded">download</span><span>Descargar</span></a>
+          </header>
+          <img id="chatImageViewerImage" alt="Imagen enviada por chat" />
+        </article>
+      </dialog>
+      <div class="toast" id="adminToast" role="status" aria-live="polite"></div>
+    </main>
+    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-database-compat.js"></script>
+    <script src="api-config.js"></script>
+    <script src="shared-store.js"></script>
+    <script src="notifications.js"></script>
+    <script src="dueno.js"></script>
+    <script src="pwa.js"></script>
+  </body>
+</html>
+
+
+

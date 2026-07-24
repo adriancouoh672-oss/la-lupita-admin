@@ -1,0 +1,8 @@
+{
+	"appId": "com.lalupita.admin",
+	"appName": "La Lupita Admin",
+	"webDir": "dist-admin",
+	"android": {
+		"path": "android-admin"
+	}
+}
