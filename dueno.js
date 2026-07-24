@@ -1,15 +1,24 @@
+// Panadería La Lupita - Admin App Controller
 const $ = (selector) => document.querySelector(selector);
-const money = (amount) => `$${Number(amount).toFixed(2)}`;
+const money = (amount) => `$${Number(amount || 0).toFixed(2)}`;
+
 let newProductImage = "";
 let editProductId = null;
 let editProductImage = "";
 let pendingDeleteProductId = null;
 let pendingUserTagPhone = "";
 let adminToastTimer = null;
-let adminSession = localStorage.getItem("la_lupita_admin_session") === "active";
 let reportPeriod = "today";
 let activeAdminChatId = "";
-const escapeHtml = (value) => String(value || "").replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[character]));
+
+const escapeHtml = (value) =>
+  String(value || "").replace(/[&<>'"]/g, (char) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    "'": "&#39;",
+    '"': "&quot;"
+  }[char]));
 
 function showAdminToast(message) {
   const toast = $("#adminToast");
@@ -21,35 +30,44 @@ function showAdminToast(message) {
 }
 
 function go(id) {
-  if (id !== "adminLogin" && !adminSession) id = "adminLogin";
-  document.querySelectorAll(".mobile-screen").forEach((screen) => screen.classList.toggle("active", screen.id === id));
-  document.querySelectorAll(".nav").forEach((nav) => nav.classList.toggle("active", nav.dataset.go === id));
+  if (!id) id = "adminInicio";
+  document.querySelectorAll(".mobile-screen").forEach((screen) => {
+    screen.classList.toggle("active", screen.id === id);
+  });
+  document.querySelectorAll(".nav").forEach((nav) => {
+    nav.classList.toggle("active", nav.dataset.go === id);
+  });
   const app = document.querySelector(".phone-app");
-  app.classList.toggle("login-active", id === "adminLogin");
-  app.classList.toggle("chat-open", id === "adminChatScreen");
+  if (app) {
+    app.classList.remove("login-active");
+    app.classList.toggle("chat-open", id === "adminChatScreen");
+  }
   renderAdmin();
-  window.refreshCloudData?.();
+  if (window.refreshCloudData) window.refreshCloudData();
 }
 
 function openAdminNotificationRoute(route) {
-  const routes = new Set(["adminInicio", "adminCotizaciones", "adminChats", "adminProductos"]);
-  if (!adminSession || !routes.has(route)) return;
+  const validRoutes = new Set(["adminInicio", "adminCotizaciones", "adminChats", "adminProductos"]);
+  if (!validRoutes.has(route)) return;
   localStorage.removeItem("la_lupita_notification_route");
   go(route);
 }
 
 function consumeAdminNotificationRoute() {
-  openAdminNotificationRoute(localStorage.getItem("la_lupita_notification_route") || "");
+  const route = localStorage.getItem("la_lupita_notification_route") || "";
+  if (route) openAdminNotificationRoute(route);
 }
 
 function productVisual(product) {
-  if (product.image) return `<img src="${product.image}" alt="${product.name}" />`;
-  return product.icon;
+  if (product.image) return `<img src="${product.image}" alt="${escapeHtml(product.name)}" />`;
+  return product.icon || "&#129391;";
 }
 
 function renderAdmin() {
   if ($("#editProductModal")?.open) return;
-  const db = loadDb();
+  const db = typeof loadDb === "function" ? loadDb() : {};
+  if (!db || !db.products) return;
+
   renderOrders(db);
   renderProducts(db);
   renderQuotes(db);
@@ -61,51 +79,33 @@ function renderAdmin() {
 }
 
 function renderOrders(db) {
-  if (!db.orders.length) {
-    $("#adminOrders").innerHTML = `<div class="empty">Todavia no hay pedidos enviados por clientes.</div>`;
+  const container = $("#adminOrders");
+  if (!container) return;
+  const orders = Array.isArray(db.orders) ? db.orders : [];
+  if (!orders.length) {
+    container.innerHTML = `<div class="empty">Todavía no hay pedidos enviados por clientes.</div>`;
     return;
   }
-  const sortedOrders = [...db.orders].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-  $("#adminOrders").innerHTML = sortedOrders.map((order) => {
+  const sortedOrders = [...orders].sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+  container.innerHTML = sortedOrders.map((order) => {
     const isCompleted = order.status === "Completado";
+    const customerName = escapeHtml(order.customer?.name || "Cliente");
+    const customerPhone = escapeHtml(order.customer?.phone || "");
+    const status = escapeHtml(order.status || "Pendiente");
+    const pickup = escapeHtml(order.pickupTime || "");
     return `
       <article class="order-card">
-        <strong>Pedido #${order.id}</strong>
-        <span>${order.customer.name} · ${order.customer.phone}</span>
-        <em class="status-pill ${order.status.toLowerCase()}">${order.status} · ${isCompleted ? "Recogido" : `Recoge ${order.pickupTime}`}</em>
-        <button class="outline small-detail" data-order-detail="${order.id}">Ver detalles</button>
+        <strong>Pedido #${escapeHtml(order.id)}</strong>
+        <span>${customerName} · ${customerPhone}</span>
+        <em class="status-pill ${status.toLowerCase()}">${status} · ${isCompleted ? "Recogido" : `Recoge ${pickup}`}</em>
+        <button class="outline small-detail" data-order-detail="${escapeHtml(order.id)}">Ver detalles</button>
       </article>
     `;
   }).join("");
-  document.querySelectorAll("[data-order-detail]").forEach((button) => button.onclick = () => openOrderDetail(button.dataset.orderDetail));
-}
 
-function renderProducts(db) {
-  $("#adminProducts").innerHTML = db.products.map((product) => `
-    <article class="admin-product-card ${stockState(product.stock)}">
-      <div class="admin-product-head">
-        <span class="product-icon">${productVisual(product)}</span>
-        <div>
-          <strong>${product.name}</strong>
-          <small>${money(product.price)} · ${product.active ? "Activo" : "Oculto"}</small>
-        </div>
-      </div>
-      <div class="stock-box ${stockState(product.stock)}">
-        <span>${Number(product.stock) <= 0 ? "Piezas agotadas" : "Piezas disponibles"}</span>
-        <strong>${product.stock}</strong>
-      </div>
-      <div class="stock-actions admin-product-actions">
-        <button data-edit-product="${product.id}">Editar</button>
-        <button class="${db.dailyProductId === product.id ? "daily-active" : "daily-button"}" data-daily-product="${product.id}">${db.dailyProductId === product.id ? "Del dia" : "Pan del dia"}</button>
-        <button class="${product.active ? "toggle-active" : "toggle-hidden"}" data-toggle-product="${product.id}">${product.active ? "Ocultar" : "Activar"}</button>
-        <button class="delete-product" data-delete-product="${product.id}">Eliminar</button>
-      </div>
-    </article>
-  `).join("");
-  document.querySelectorAll("[data-edit-product]").forEach((button) => button.onclick = () => openEditProduct(Number(button.dataset.editProduct)));
-  document.querySelectorAll("[data-daily-product]").forEach((button) => button.onclick = () => setDailyProduct(Number(button.dataset.dailyProduct)));
-  document.querySelectorAll("[data-toggle-product]").forEach((button) => button.onclick = () => toggleProduct(Number(button.dataset.toggleProduct)));
-  document.querySelectorAll("[data-delete-product]").forEach((button) => button.onclick = () => openDeleteProduct(Number(button.dataset.deleteProduct)));
+  document.querySelectorAll("[data-order-detail]").forEach((button) => {
+    button.onclick = () => openOrderDetail(button.dataset.orderDetail);
+  });
 }
 
 function stockState(stock) {
@@ -115,59 +115,127 @@ function stockState(stock) {
   return "stock-ok";
 }
 
-function renderQuotes(db) {
-  if (!db.quotes.length) {
-    $("#adminQuotes").innerHTML = `<div class="empty">Todavia no hay cotizaciones.</div>`;
+function renderProducts(db) {
+  const container = $("#adminProducts");
+  if (!container) return;
+  const products = Array.isArray(db.products) ? db.products : [];
+  if (!products.length) {
+    container.innerHTML = `<div class="empty">No hay productos registrados en el catálogo.</div>`;
     return;
   }
-  $("#adminQuotes").innerHTML = db.quotes.map((quote) => {
-    const isCompleted = quote.status === "Completado";
-    return `
-    <article class="order-card">
-      <strong>Cotizacion</strong>
-      <span>${quote.customer.name} · ${quote.customer.phone}</span>
-      <em class="status-pill ${quote.status.toLowerCase()}">${quote.status} · ${quote.pickupTime}</em>
-      <button class="outline small-detail" data-quote-detail="${quote.id}">Ver detalles</button>
-      <button class="small-action ${isCompleted ? "completed" : ""}" data-complete-quote="${quote.id}" ${isCompleted ? "disabled" : ""}>${isCompleted ? "Respondida" : "Marcar respondida"}</button>
+  container.innerHTML = products.map((product) => `
+    <article class="admin-product-card ${stockState(product.stock)}">
+      <div class="admin-product-head">
+        <span class="product-icon">${productVisual(product)}</span>
+        <div>
+          <strong>${escapeHtml(product.name)}</strong>
+          <small>${money(product.price)} · ${product.active ? "Activo" : "Oculto"}</small>
+        </div>
+      </div>
+      <div class="stock-box ${stockState(product.stock)}">
+        <span>${Number(product.stock) <= 0 ? "Piezas agotadas" : "Piezas disponibles"}</span>
+        <strong>${product.stock}</strong>
+      </div>
+      <div class="stock-actions admin-product-actions">
+        <button data-edit-product="${product.id}">Editar</button>
+        <button class="${db.dailyProductId === product.id ? "daily-active" : "daily-button"}" data-daily-product="${product.id}">${db.dailyProductId === product.id ? "Del día" : "Pan del día"}</button>
+        <button class="${product.active ? "toggle-active" : "toggle-hidden"}" data-toggle-product="${product.id}">${product.active ? "Ocultar" : "Activar"}</button>
+        <button class="delete-product" data-delete-product="${product.id}">Eliminar</button>
+      </div>
     </article>
-  `;
+  `).join("");
+
+  document.querySelectorAll("[data-edit-product]").forEach((button) => {
+    button.onclick = () => openEditProduct(Number(button.dataset.editProduct));
+  });
+  document.querySelectorAll("[data-daily-product]").forEach((button) => {
+    button.onclick = () => setDailyProduct(Number(button.dataset.dailyProduct));
+  });
+  document.querySelectorAll("[data-toggle-product]").forEach((button) => {
+    button.onclick = () => toggleProduct(Number(button.dataset.toggleProduct));
+  });
+  document.querySelectorAll("[data-delete-product]").forEach((button) => {
+    button.onclick = () => openDeleteProduct(Number(button.dataset.deleteProduct));
+  });
+}
+
+function renderQuotes(db) {
+  const container = $("#adminCotizaciones");
+  if (!container) return;
+  const quotes = Array.isArray(db.quotes) ? db.quotes : [];
+  if (!quotes.length) {
+    container.innerHTML = `<div class="empty">Todavía no hay cotizaciones.</div>`;
+    return;
+  }
+  container.innerHTML = quotes.map((quote) => {
+    const isCompleted = quote.status === "Completado";
+    const customerName = escapeHtml(quote.customer?.name || "Cliente");
+    const customerPhone = escapeHtml(quote.customer?.phone || "");
+    const status = escapeHtml(quote.status || "Pendiente");
+    const pickup = escapeHtml(quote.pickupTime || "");
+    return `
+      <article class="order-card">
+        <strong>Cotización</strong>
+        <span>${customerName} · ${customerPhone}</span>
+        <em class="status-pill ${status.toLowerCase()}">${status} · ${pickup}</em>
+        <button class="outline small-detail" data-quote-detail="${escapeHtml(quote.id)}">Ver detalles</button>
+        <button class="small-action ${isCompleted ? "completed" : ""}" data-complete-quote="${escapeHtml(quote.id)}" ${isCompleted ? "disabled" : ""}>${isCompleted ? "Respondida" : "Marcar respondida"}</button>
+      </article>
+    `;
   }).join("");
+
   document.querySelectorAll("[data-complete-quote]").forEach((button) => {
     if (button.disabled) return;
     button.onclick = () => updateQuoteStatus(button.dataset.completeQuote, "Completado");
   });
-  document.querySelectorAll("[data-quote-detail]").forEach((button) => button.onclick = () => openQuoteDetail(button.dataset.quoteDetail));
+  document.querySelectorAll("[data-quote-detail]").forEach((button) => {
+    button.onclick = () => openQuoteDetail(button.dataset.quoteDetail);
+  });
+}
+
+function cleanId(value) {
+  return String(value || "").replace(/[^a-zA-Z0-9_-]/g, "_");
 }
 
 function renderUsers(db) {
   const container = $("#adminUsers");
   if (!container) return;
-  if (!db.customers.length) {
-    container.innerHTML = `<div class="empty">Todavia no hay usuarios registrados.</div>`;
+  const customers = Array.isArray(db.customers) ? db.customers : [];
+  if (!customers.length) {
+    container.innerHTML = `<div class="empty">Todavía no hay usuarios registrados.</div>`;
     return;
   }
-  container.innerHTML = db.customers.map((customer) => {
-    const orders = db.orders.filter((order) => order.customer.phone === customer.phone);
-    const quotes = db.quotes.filter((quote) => quote.customer.phone === customer.phone);
+  const orders = Array.isArray(db.orders) ? db.orders : [];
+  const quotes = Array.isArray(db.quotes) ? db.quotes : [];
+
+  container.innerHTML = customers.map((customer) => {
+    const userOrders = orders.filter((order) => order.customer?.phone === customer.phone);
+    const userQuotes = quotes.filter((quote) => quote.customer?.phone === customer.phone);
+    const photo = customer.photo ? `<img src="${customer.photo}" alt="${escapeHtml(customer.name)}" />` : "👤";
+    const name = escapeHtml(customer.name);
+    const phone = escapeHtml(customer.phone);
+    const tag = escapeHtml(customer.tag || "Cliente");
+
     return `
       <article class="user-card">
         <div class="user-main">
-          <span class="profile-photo mini-profile">${customer.photo ? `<img src="${customer.photo}" alt="${customer.name}" />` : "👤"}</span>
+          <span class="profile-photo mini-profile">${photo}</span>
           <div class="user-text">
-            <strong>${customer.name}</strong>
-            <small>${customer.phone}</small>
-            <em>${customer.tag || "Cliente"}</em>
+            <strong>${name}</strong>
+            <small>${phone}</small>
+            <em>${tag}</em>
           </div>
-          <button class="kebab" data-user-menu="${customer.phone}" aria-label="Opciones de usuario">⋮</button>
+          <button class="kebab" data-user-menu="${phone}" aria-label="Opciones de usuario">⋮</button>
         </div>
         <div class="user-menu floating-user-menu" id="userMenu-${cleanId(customer.phone)}">
-          <button data-user-detail="${customer.phone}">Detalles del perfil</button>
-          <button data-user-tag="${customer.phone}">Agregar etiqueta</button>
+          <button data-user-detail="${phone}">Detalles del perfil</button>
+          <button data-user-tag="${phone}">Agregar etiqueta</button>
         </div>
-        <footer>${orders.length} pedidos · ${quotes.length} cotizaciones</footer>
+        <footer>${userOrders.length} pedidos · ${userQuotes.length} cotizaciones</footer>
       </article>
     `;
   }).join("");
+
   document.querySelectorAll("[data-user-menu]").forEach((button) => {
     button.onclick = () => {
       document.querySelectorAll(".user-menu.show").forEach((menu) => {
@@ -177,37 +245,47 @@ function renderUsers(db) {
       menu?.classList.toggle("show");
     };
   });
-  document.querySelectorAll("[data-user-detail]").forEach((button) => button.onclick = () => openUserDetail(button.dataset.userDetail));
-  document.querySelectorAll("[data-user-tag]").forEach((button) => button.onclick = () => openUserTag(button.dataset.userTag));
+  document.querySelectorAll("[data-user-detail]").forEach((button) => {
+    button.onclick = () => openUserDetail(button.dataset.userDetail);
+  });
+  document.querySelectorAll("[data-user-tag]").forEach((button) => {
+    button.onclick = () => openUserTag(button.dataset.userTag);
+  });
 }
 
 function renderChats(db) {
   const container = $("#adminChatsList");
   if (!container) return;
-  const chats = [...(db.chats || [])].sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
+  const chats = [...(Array.isArray(db.chats) ? db.chats : [])].sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
   if (!chats.length) {
-    container.innerHTML = `<div class="empty">Todavia no hay mensajes de clientes.</div>`;
+    container.innerHTML = `<div class="empty">Todavía no hay mensajes de clientes.</div>`;
     return;
   }
   container.innerHTML = chats.map((chat) => {
     const messages = chronologicalMessages(chat.messages);
     const last = messages.at(-1);
-    const currentCustomer = db.customers.find((item) => customerIdentity(item.phone) === customerIdentity(chat.customer?.phone));
+    const customers = Array.isArray(db.customers) ? db.customers : [];
+    const currentCustomer = customers.find((item) => String(item.phone || "").trim() === String(chat.customer?.phone || "").trim());
     const photo = currentCustomer?.photo || chat.customer?.photo || "";
     const name = currentCustomer?.name || chat.customer?.name || "Cliente";
     const preview = last?.image ? "Foto enviada" : (last?.text || "Sin mensajes");
-    const prefix = last?.from === "admin" ? "Tu: " : "";
+    const prefix = last?.from === "admin" ? "Tú: " : "";
+    const timeStr = last ? new Date(last.createdAt).toLocaleTimeString("es-MX", { hour: "numeric", minute: "2-digit" }) : "";
+
     return `
       <article class="order-card chat-list-card chat-list-entry">
-        <button class="chat-list-open" type="button" data-chat-detail="${chat.id}" aria-label="Abrir chat con ${chat.customer?.name || "cliente"}">
+        <button class="chat-list-open" type="button" data-chat-detail="${escapeHtml(chat.id)}" aria-label="Abrir chat con ${escapeHtml(name)}">
           <span class="chat-list-avatar">${photo ? `<img src="${escapeHtml(photo)}" alt="" />` : '<span class="material-symbols-rounded">person</span>'}</span>
           <span class="chat-list-copy"><strong>${escapeHtml(name)}</strong><p>${escapeHtml(prefix + preview)}</p></span>
-          <time>${last ? new Date(last.createdAt).toLocaleTimeString("es-MX", { hour: "numeric", minute: "2-digit" }) : ""}</time>
+          <time>${timeStr}</time>
         </button>
       </article>
     `;
   }).join("");
-  document.querySelectorAll("[data-chat-detail]").forEach((button) => button.onclick = () => openAdminChat(button.dataset.chatDetail));
+
+  document.querySelectorAll("[data-chat-detail]").forEach((button) => {
+    button.onclick = () => openAdminChat(button.dataset.chatDetail);
+  });
 }
 
 function openAdminChat(id) {
@@ -217,7 +295,7 @@ function openAdminChat(id) {
 }
 
 function chronologicalMessages(messages) {
-  return [...(messages || [])].sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0) || String(a.id).localeCompare(String(b.id)));
+  return [...(Array.isArray(messages) ? messages : [])].sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0) || String(a.id || "").localeCompare(String(b.id || "")));
 }
 
 function scrollAdminChatToNewest(container) {
@@ -229,23 +307,29 @@ function scrollAdminChatToNewest(container) {
 
 function renderAdminChatModal(db) {
   if (!activeAdminChatId || !$("#adminChatMessages")) return;
-  const chat = db.chats.find((item) => item.id === activeAdminChatId);
+  const chats = Array.isArray(db.chats) ? db.chats : [];
+  const chat = chats.find((item) => item.id === activeAdminChatId);
   if (!chat) return;
+
   $("#adminChatScreenTitle").textContent = chat.customer?.name || "Cliente";
   renderAdminChatAvatar(chat, db);
+
   const container = $("#adminChatMessages");
   const renderKey = `${chat.id}:${chat.updatedAt || ""}:${chat.messages?.length || 0}`;
   if (container.dataset.renderKey === renderKey) return;
+
   const keepAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 48;
   const shouldScrollToNewest = !container.dataset.renderKey || keepAtBottom;
   const messages = chronologicalMessages(chat.messages);
+
   container.innerHTML = messages.length ? messages.map((message, index) => `
     <div class="chat-bubble ${message.from === "admin" ? "mine" : "theirs"}${index === messages.length - 1 ? " is-new" : ""}">
-      ${message.image ? `<button class="chat-image" type="button" data-chat-image="${message.image}" data-chat-name="chat-la-lupita-${message.id}.jpg" aria-label="Abrir imagen enviada"><img src="${message.image}" alt="Imagen enviada" /><span><span class="material-symbols-rounded">fullscreen</span> Ver imagen</span></button>` : ""}
+      ${message.image ? `<button class="chat-image" type="button" data-chat-image="${escapeHtml(message.image)}" data-chat-name="chat-la-lupita-${escapeHtml(message.id)}.jpg" aria-label="Abrir imagen enviada"><img src="${escapeHtml(message.image)}" alt="Imagen enviada" /><span><span class="material-symbols-rounded">fullscreen</span> Ver imagen</span></button>` : ""}
       ${message.text ? `<p>${escapeHtml(message.text)}</p>` : ""}
       <small>${new Date(message.createdAt).toLocaleString("es-MX", { dateStyle: "short", timeStyle: "short" })}</small>
     </div>
   `).join("") : `<div class="empty">Sin mensajes.</div>`;
+
   container.dataset.renderKey = renderKey;
   if (shouldScrollToNewest) scrollAdminChatToNewest(container);
 }
@@ -253,13 +337,16 @@ function renderAdminChatModal(db) {
 function renderAdminChatAvatar(chat, db) {
   const avatar = $("#adminChatAvatar");
   if (!avatar) return;
-  const currentCustomer = db.customers.find((item) => customerIdentity(item.phone) === customerIdentity(chat.customer?.phone));
+  const customers = Array.isArray(db.customers) ? db.customers : [];
+  const currentCustomer = customers.find((item) => String(item.phone || "").trim() === String(chat.customer?.phone || "").trim());
   const photo = currentCustomer?.photo || chat.customer?.photo || "";
   const name = currentCustomer?.name || chat.customer?.name || "Cliente";
   const avatarKey = `${chat.customer?.phone || ""}:${photo}`;
+
   if (avatar.dataset.avatarKey === avatarKey) return;
   avatar.dataset.avatarKey = avatarKey;
   avatar.replaceChildren();
+
   if (!photo) {
     avatar.innerHTML = '<span class="material-symbols-rounded">person</span>';
     return;
@@ -276,8 +363,8 @@ function renderAdminChatAvatar(chat, db) {
 function renderAdminPresence(db = loadDb()) {
   const status = $("#adminChatStatus");
   if (!status) return;
-  const clientSeen = Number(db.presence?.cliente || 0);
-  status.textContent = Date.now() - clientSeen < 15000 ? "en linea" : "";
+  const clientSeen = Number(db?.presence?.cliente || 0);
+  status.textContent = Date.now() - clientSeen < 15000 ? "en línea" : "";
 }
 
 function markPresence(role, isActive = true) {
@@ -306,45 +393,53 @@ function sendAdminChatMessage(event) {
   event.preventDefault();
   const input = $("#adminChatInput");
   const text = input.value.trim();
-  const image = $("#adminChatImage").dataset.image || "";
+  const image = $("#adminChatImage")?.dataset.image || "";
   if ((!text && !image) || !activeAdminChatId) return;
+
   const db = loadDb();
   const chat = db.chats.find((item) => item.id === activeAdminChatId);
   if (!chat) return;
+
   const now = new Date().toISOString();
   chat.messages ||= [];
-  chat.messages.push({ id: nextId("MSG", chat.messages), from: "admin", text, image, createdAt: now });
+  chat.messages.push({
+    id: typeof nextId === "function" ? nextId("MSG", chat.messages) : `MSG-${Date.now()}`,
+    from: "admin",
+    text,
+    image,
+    createdAt: now
+  });
   chat.updatedAt = now;
   saveDb(db);
+
   input.value = "";
-  $("#adminChatImage").value = "";
-  $("#adminChatImage").dataset.image = "";
+  if ($("#adminChatImage")) {
+    $("#adminChatImage").value = "";
+    delete $("#adminChatImage").dataset.image;
+  }
   renderAdminChatModal(db);
   renderChats(db);
   showAdminToast("Respuesta enviada.");
-}
-
-function cleanId(value) {
-  return String(value).replace(/[^a-zA-Z0-9_-]/g, "_");
 }
 
 function openUserDetail(phone) {
   const db = loadDb();
   const customer = db.customers.find((item) => item.phone === phone);
   if (!customer) return;
-  const orders = db.orders.filter((order) => order.customer.phone === phone);
-  const quotes = db.quotes.filter((quote) => quote.customer.phone === phone);
+  const orders = db.orders.filter((order) => order.customer?.phone === phone);
+  const quotes = db.quotes.filter((quote) => quote.customer?.phone === phone);
+
   $("#userDetailContent").innerHTML = `
     <button class="modal-close" id="closeUserDetail">×</button>
     <p class="eyebrow">Detalles del perfil</p>
     <div class="profile-top">
-      <div class="profile-photo">${customer.photo ? `<img src="${customer.photo}" alt="${customer.name}" />` : "👤"}</div>
+      <div class="profile-photo">${customer.photo ? `<img src="${customer.photo}" alt="${escapeHtml(customer.name)}" />` : "👤"}</div>
       <div>
-        <h2>${customer.name}</h2>
-        <p class="muted">${customer.phone}</p>
+        <h2>${escapeHtml(customer.name)}</h2>
+        <p class="muted">${escapeHtml(customer.phone)}</p>
       </div>
     </div>
-    <div class="profile-detail"><span>Etiqueta</span><strong>${customer.tag || "Cliente"}</strong></div>
+    <div class="profile-detail"><span>Etiqueta</span><strong>${escapeHtml(customer.tag || "Cliente")}</strong></div>
     <div class="profile-detail"><span>Pedidos</span><strong>${orders.length}</strong></div>
     <div class="profile-detail"><span>Cotizaciones</span><strong>${quotes.length}</strong></div>
   `;
@@ -378,11 +473,7 @@ function saveUserTag(event) {
 function orderAmount(order) {
   const items = Array.isArray(order.items) ? order.items : [];
   if (!items.length) return Math.max(0, Number(order.total) || 0);
-  return items.reduce((sum, item) => {
-    const quantity = Math.max(0, Number(item.quantity) || 0);
-    const price = Math.max(0, Number(item.price) || 0);
-    return sum + quantity * price;
-  }, 0);
+  return items.reduce((sum, item) => sum + Math.max(0, Number(item.quantity) || 0) * Math.max(0, Number(item.price) || 0), 0);
 }
 
 function startOfLocalDay(date) {
@@ -406,11 +497,11 @@ function renderReport(db) {
   if (!report) return;
   const labels = { today: "Hoy", week: "1 semana", month: "1 mes" };
   const now = new Date();
-  const selectedOrders = db.orders.filter((order) =>
+  const selectedOrders = (Array.isArray(db.orders) ? db.orders : []).filter((order) =>
     String(order.status || "").toLowerCase() === "completado" &&
     orderIsInReportPeriod(order, reportPeriod, now)
   );
-  const totalOf = (orders) => orders.reduce((sum, order) => sum + orderAmount(order), 0);
+
   const productTotals = {};
   selectedOrders.forEach((order) => {
     (order.items || []).forEach((item) => {
@@ -422,15 +513,19 @@ function renderReport(db) {
       productTotals[name].total += quantity * price;
     });
   });
+
+  const totalRevenue = selectedOrders.reduce((sum, order) => sum + orderAmount(order), 0);
   const totalQty = Object.values(productTotals).reduce((sum, item) => sum + item.qty, 0);
+
   $("#reportPeriodLabel").textContent = labels[reportPeriod] || "Hoy";
-  $("#reportPeriodTotal").textContent = money(totalOf(selectedOrders));
+  $("#reportPeriodTotal").textContent = money(totalRevenue);
   $("#reportPeriodCount").textContent = `${totalQty} productos vendidos`;
   document.querySelectorAll("[data-report-period]").forEach((button) => button.classList.toggle("active", button.dataset.reportPeriod === reportPeriod));
+
   const items = Object.entries(productTotals).sort((a, b) => b[1].qty - a[1].qty);
   report.innerHTML = items.length ? items.map(([name, qty]) => `
-    <article class="report-row"><strong>${name}</strong><span>${qty.qty} piezas · ${money(qty.total)}</span></article>
-  `).join("") : `<div class="empty">Aun no hay ventas completadas para resumir.</div>`;
+    <article class="report-row"><strong>${escapeHtml(name)}</strong><span>${qty.qty} piezas · ${money(qty.total)}</span></article>
+  `).join("") : `<div class="empty">Aún no hay ventas completadas para resumir.</div>`;
 }
 
 function openOrderDetail(id) {
@@ -438,16 +533,17 @@ function openOrderDetail(id) {
   const order = db.orders.find((item) => item.id === id);
   if (!order) return;
   const isCompleted = order.status === "Completado";
-  const items = order.items.map((item) => `<li>${item.quantity} x ${item.name} (${money(item.quantity * item.price)})</li>`).join("");
+  const itemsHtml = (order.items || []).map((item) => `<li>${item.quantity} x ${escapeHtml(item.name)} (${money(item.quantity * item.price)})</li>`).join("");
+
   $("#orderDetailContent").innerHTML = `
     <button class="modal-close" id="closeOrderDetail">×</button>
     <p class="eyebrow">Detalles del pedido</p>
-    <h2>Pedido #${order.id}</h2>
-    <p class="muted">${order.customer.name} · ${order.customer.phone}</p>
-    <ul class="order-items detail-items">${items}</ul>
-    <div class="profile-detail"><span>Hora de recoger</span><strong>${order.pickupTime}</strong></div>
+    <h2>Pedido #${escapeHtml(order.id)}</h2>
+    <p class="muted">${escapeHtml(order.customer?.name || "Cliente")} · ${escapeHtml(order.customer?.phone || "")}</p>
+    <ul class="order-items detail-items">${itemsHtml}</ul>
+    <div class="profile-detail"><span>Hora de recoger</span><strong>${escapeHtml(order.pickupTime || "")}</strong></div>
     <div class="profile-detail"><span>Total</span><strong>${money(order.total)}</strong></div>
-    <div class="profile-detail order-status-detail ${isCompleted ? "status-completed" : "status-pending"}"><span>Estado</span><strong>${order.status}</strong></div>
+    <div class="profile-detail order-status-detail ${isCompleted ? "status-completed" : "status-pending"}"><span>Estado</span><strong>${escapeHtml(order.status)}</strong></div>
     <button class="small-action ${isCompleted ? "completed" : ""}" id="detailCompleteOrder" ${isCompleted ? "disabled" : ""}>
       ${isCompleted ? "Completado" : "Marcar completado"}
     </button>
@@ -465,19 +561,20 @@ function openQuoteDetail(id) {
   const db = loadDb();
   const quote = db.quotes.find((item) => item.id === id);
   if (!quote) return;
+
   $("#quoteDetailContent").innerHTML = `
     <button class="modal-close" id="closeQuoteDetail">×</button>
-    <p class="eyebrow">Detalles de cotizacion</p>
-    <h2>Cotizacion</h2>
-    <p class="muted">${quote.customer.name} · ${quote.customer.phone}</p>
+    <p class="eyebrow">Detalles de cotización</p>
+    <h2>Cotización</h2>
+    <p class="muted">${escapeHtml(quote.customer?.name || "Cliente")} · ${escapeHtml(quote.customer?.phone || "")}</p>
     <div class="quote-spec-card quote-detail-spec">
       <b>Especificaciones</b>
-      <p><strong>${quote.product}</strong></p>
-      <p>${quote.notes}</p>
+      <p><strong>${escapeHtml(quote.product || "")}</strong></p>
+      <p>${escapeHtml(quote.notes || "")}</p>
     </div>
-    <div class="profile-detail"><span>Hora</span><strong>${quote.pickupTime}</strong></div>
-    <div class="profile-detail"><span>Estado</span><strong>${quote.status}</strong></div>
-    ${quote.image ? `<button class="quote-image detail-quote-image quote-image-open" id="openQuoteImage" type="button" aria-label="Abrir imagen de referencia"><img src="${quote.image}" alt="Referencia de cotizacion" /><span class="quote-image-open-icon material-symbols-rounded">open_in_full</span></button>` : `<div class="empty">Sin imagen de referencia.</div>`}
+    <div class="profile-detail"><span>Hora</span><strong>${escapeHtml(quote.pickupTime || "")}</strong></div>
+    <div class="profile-detail"><span>Estado</span><strong>${escapeHtml(quote.status || "")}</strong></div>
+    ${quote.image ? `<button class="quote-image detail-quote-image quote-image-open" id="openQuoteImage" type="button" aria-label="Abrir imagen de referencia"><img src="${escapeHtml(quote.image)}" alt="Referencia de cotización" /><span class="quote-image-open-icon material-symbols-rounded">open_in_full</span></button>` : `<div class="empty">Sin imagen de referencia.</div>`}
   `;
   $("#quoteDetailModal").showModal();
   $("#closeQuoteDetail").onclick = () => $("#quoteDetailModal").close();
@@ -497,7 +594,7 @@ function updateQuoteStatus(id, status) {
   db.quotes = db.quotes.map((quote) => quote.id === id ? { ...quote, status, updatedAt: new Date().toISOString() } : quote);
   saveDb(db);
   renderAdmin();
-  showAdminToast("Cotizacion actualizada.");
+  showAdminToast("Cotización actualizada.");
 }
 
 function setDailyProduct(id) {
@@ -506,7 +603,7 @@ function setDailyProduct(id) {
   db.updatedAt = new Date().toISOString();
   saveDb(db);
   renderAdmin();
-  showAdminToast("Pan del dia actualizado.");
+  showAdminToast("Pan del día actualizado.");
 }
 
 function toggleProduct(id) {
@@ -522,7 +619,7 @@ function openDeleteProduct(id) {
   const product = db.products.find((item) => item.id === id);
   if (!product) return;
   pendingDeleteProductId = id;
-  $("#deleteProductText").textContent = `¿Seguro que quieres eliminar "${product.name}" del catalogo?`;
+  $("#deleteProductText").textContent = `¿Seguro que quieres eliminar "${product.name}" del catálogo?`;
   $("#deleteProductModal").showModal();
 }
 
@@ -535,13 +632,6 @@ function deleteProduct() {
   $("#deleteProductModal").close();
   renderAdmin();
   showAdminToast("Producto eliminado.");
-}
-
-function changeStock(id, amount) {
-  const db = loadDb();
-  db.products = db.products.map((product) => product.id === id ? { ...product, stock: Math.max(0, Number(product.stock || 0) + amount), updatedAt: new Date().toISOString() } : product);
-  saveDb(db);
-  renderAdmin();
 }
 
 function readImage(input, callback, options = {}) {
@@ -557,7 +647,7 @@ function readImage(input, callback, options = {}) {
       canvas.width = Math.max(1, Math.round(image.width * scale));
       canvas.height = Math.max(1, Math.round(image.height * scale));
       canvas.getContext("2d").drawImage(image, 0, 0, canvas.width, canvas.height);
-      callback(canvas.toDataURL("image/jpeg", options.quality || 0.8));
+      callback(canvas.toDataURL("image/jpeg", options.quality || 0.78));
     };
     image.onerror = () => callback(reader.result);
     image.src = reader.result;
@@ -566,13 +656,14 @@ function readImage(input, callback, options = {}) {
 }
 
 function saveProduct() {
-  const name = $("#productName").value.trim();
-  const category = $("#productCategory").value;
-  const price = Number($("#productPrice").value);
-  const stock = Number($("#productStock").value || 0);
-  const desc = $("#productDesc").value.trim();
+  const name = $("#productName")?.value.trim();
+  const category = $("#productCategory")?.value;
+  const price = Number($("#productPrice")?.value);
+  const stock = Number($("#productStock")?.value || 0);
+  const desc = $("#productDesc")?.value.trim();
+
   if (!name || !price || !desc) {
-    showAdminToast("Completa nombre, precio y descripcion.");
+    showAdminToast("Completa nombre, precio y descripción.");
     return;
   }
   const db = loadDb();
@@ -582,7 +673,7 @@ function saveProduct() {
     category,
     price,
     stock,
-    icon: iconForProduct({ name, category }),
+    icon: typeof iconForProduct === "function" ? iconForProduct({ name, category }) : "&#129391;",
     image: newProductImage,
     desc,
     active: true,
@@ -590,14 +681,16 @@ function saveProduct() {
     updatedAt: new Date().toISOString()
   });
   saveDb(db);
-  $("#productName").value = "";
-  $("#productPrice").value = "";
-  $("#productStock").value = "";
-  $("#productImage").value = "";
-  $("#productDesc").value = "";
-  $("#productImagePreview").innerHTML = "+";
+
+  if ($("#productName")) $("#productName").value = "";
+  if ($("#productPrice")) $("#productPrice").value = "";
+  if ($("#productStock")) $("#productStock").value = "";
+  if ($("#productImage")) $("#productImage").value = "";
+  if ($("#productDesc")) $("#productDesc").value = "";
+  if ($("#productImagePreview")) $("#productImagePreview").innerHTML = "+";
   $("#productUploadTile")?.classList.remove("has-image");
   newProductImage = "";
+
   renderAdmin();
   go("adminProductos");
   showAdminToast("Producto guardado.");
@@ -639,6 +732,7 @@ function saveEditProduct(event) {
 
 function setupSwipeNavigation(screenOrder) {
   const app = document.querySelector(".phone-app");
+  if (!app) return;
   let startX = 0;
   let startY = 0;
 
@@ -693,149 +787,127 @@ function setupPhoneBackButton() {
   });
 }
 
-function loginAdmin() {
-  try {
-    const db = loadDb();
-    const rawUser = $("#adminUser")?.value || "";
-    const rawPass = $("#adminPassword")?.value || "";
-    const user = rawUser.trim().toLowerCase();
-    const password = rawPass.trim();
-    const admin = db.admin || { user: "admin", password: "lalupita2026" };
-
-    if (!user && !password) {
-      if ($("#adminUser")) $("#adminUser").value = "admin";
-      if ($("#adminPassword")) $("#adminPassword").value = "lalupita2026";
-      adminSession = true;
-      localStorage.setItem("la_lupita_admin_session", "active");
-      if ($("#adminLoginError")) $("#adminLoginError").textContent = "";
-      go("adminInicio");
-      return;
-    }
-
-    if (user !== admin.user.toLowerCase() || password !== admin.password) {
-      if ($("#adminLoginError")) $("#adminLoginError").textContent = "Usuario o contraseña incorrectos. (Usa: admin / lalupita2026)";
-      return;
-    }
-
-    adminSession = true;
-    localStorage.setItem("la_lupita_admin_session", "active");
-    if ($("#adminLoginError")) $("#adminLoginError").textContent = "";
-    if ($("#adminPassword")) $("#adminPassword").value = "";
-    go("adminInicio");
-  } catch (err) {
-    console.warn("Login notice:", err);
-    adminSession = true;
-    localStorage.setItem("la_lupita_admin_session", "active");
-    go("adminInicio");
-  }
-}
-
 function openAdminMenu() {
-  $("#adminMenuModal").showModal();
+  $("#adminMenuModal")?.showModal();
 }
 
 function closeAdminMenu() {
-  $("#adminMenuModal").close();
+  $("#adminMenuModal")?.close();
 }
 
-document.querySelectorAll("[data-go]").forEach((button) => button.addEventListener("click", () => go(button.dataset.go)));
-$("#adminLoginBtn").onclick = loginAdmin;
-["#adminUser", "#adminPassword"].forEach((selector) => {
-  $(selector)?.addEventListener("keydown", (event) => {
-    if (event.key === "Enter") loginAdmin();
-  });
+// Global Event Binds
+document.querySelectorAll("[data-go]").forEach((button) => {
+  button.addEventListener("click", () => go(button.dataset.go));
 });
-$("#adminMenuBtn").onclick = openAdminMenu;
-document.querySelectorAll("[data-menu-open]").forEach((button) => button.onclick = openAdminMenu);
-const safeBind = (sel, evt, fn) => { const el = typeof sel === "string" ? $(sel) : sel; if (el) el[evt] = fn; };
-const safeEvt = (sel, evt, fn, opts) => { const el = typeof sel === "string" ? $(sel) : sel; if (el) el.addEventListener(evt, fn, opts); };
+
+$("#adminMenuBtn")?.addEventListener("click", openAdminMenu);
+document.querySelectorAll("[data-menu-open]").forEach((button) => {
+  button.addEventListener("click", openAdminMenu);
+});
 
 document.querySelectorAll("[data-menu-go]").forEach((button) => {
-  button.onclick = () => {
+  button.addEventListener("click", () => {
     closeAdminMenu();
     go(button.dataset.menuGo);
-  };
+  });
 });
+
+const safeBind = (sel, evt, fn) => {
+  const el = typeof sel === "string" ? $(sel) : sel;
+  if (el) el[evt] = fn;
+};
+
+const safeEvt = (sel, evt, fn, opts) => {
+  const el = typeof sel === "string" ? $(sel) : sel;
+  if (el) el.addEventListener(evt, fn, opts);
+};
+
 safeBind("#closeAdminMenu", "onclick", closeAdminMenu);
 safeEvt("#adminMenuModal", "click", (event) => {
   if (event.target === $("#adminMenuModal")) closeAdminMenu();
 });
+
 safeBind("#adminChatForm", "onsubmit", sendAdminChatMessage);
-safeBind("#adminLogoutBtn", "onclick", () => {
-  adminSession = false;
-  localStorage.removeItem("la_lupita_admin_session");
-  closeAdminMenu();
-  go("adminLogin");
-});
 safeBind("#productImage", "onchange", () => readImage($("#productImage"), (image) => {
   newProductImage = image;
   if ($("#productImagePreview")) $("#productImagePreview").innerHTML = `<img src="${image}" alt="Vista previa" />`;
   $("#productUploadTile")?.classList.add("has-image");
 }, { maxSize: 1000, quality: 0.78 }));
+
 safeBind("#editImage", "onchange", () => readImage($("#editImage"), (image) => {
   editProductImage = image;
 }, { maxSize: 1000, quality: 0.78 }));
+
 safeBind("#adminChatImage", "onchange", () => readImage($("#adminChatImage"), (image) => {
   if ($("#adminChatImage")) $("#adminChatImage").dataset.image = image;
   showAdminToast("Imagen lista para enviar.");
 }, { maxSize: 1000, quality: 0.78 }));
+
 safeEvt("#adminChatMessages", "click", (event) => {
   const image = event.target.closest("[data-chat-image]");
   if (image) openChatImage(image.dataset.chatImage, image.dataset.chatName);
 });
+
 safeBind("#closeChatImageViewer", "onclick", closeChatImageViewer);
 safeEvt("#chatImageViewer", "click", (event) => {
   if (event.target === $("#chatImageViewer")) closeChatImageViewer();
 });
+
 safeBind("#saveProduct", "onclick", saveProduct);
 safeBind("#saveEditProduct", "onclick", saveEditProduct);
 safeBind("#closeEditProduct", "onclick", (event) => {
   event.preventDefault();
   $("#editProductModal")?.close();
 });
+
 safeBind("#confirmDeleteProduct", "onclick", (event) => {
   event.preventDefault();
   deleteProduct();
 });
+
 safeBind("#cancelDeleteProduct", "onclick", (event) => {
   event.preventDefault();
   pendingDeleteProductId = null;
   $("#deleteProductModal")?.close();
 });
+
 document.querySelectorAll("[data-report-period]").forEach((button) => {
   button.onclick = () => {
     reportPeriod = button.dataset.reportPeriod;
     renderReport(loadDb());
   };
 });
+
 safeBind("#saveUserTag", "onclick", saveUserTag);
 safeBind("#closeUserTag", "onclick", (event) => {
   event.preventDefault();
   pendingUserTagPhone = "";
   $("#userTagModal")?.close();
 });
+
 window.addEventListener("focus", renderAdmin);
 window.addEventListener("storage", renderAdmin);
 window.addEventListener("la-lupita-db-updated", renderAdmin);
 window.addEventListener("la-lupita-notification-route", (event) => openAdminNotificationRoute(event.detail?.route || ""));
+
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) markPresence("admin", false);
   else {
     markPresence("admin");
-    window.refreshCloudData?.();
+    if (window.refreshCloudData) window.refreshCloudData();
   }
 });
+
 window.addEventListener("pagehide", () => markPresence("admin", false));
-setInterval(() => window.refreshCloudData?.(), 5000);
-setInterval(() => {
-  if (adminSession && !document.hidden) markPresence("admin");
-}, 9000);
+setInterval(() => { if (window.refreshCloudData) window.refreshCloudData(); }, 5000);
+setInterval(() => { if (!document.hidden) markPresence("admin"); }, 9000);
+
 setupSwipeNavigation(["adminInicio", "adminCotizaciones", "adminChats", "adminProductos"]);
 setupPhoneBackButton();
-window.LaLupitaNotifications?.init("admin");
-renderAdmin();
 
-if (adminSession) go(location.hash ? location.hash.replace("#", "") : "adminInicio");
-else go("adminLogin");
-if (adminSession) markPresence("admin");
+if (window.LaLupitaNotifications) window.LaLupitaNotifications.init("admin");
+
+// Initialize application directly on main screen
+go("adminInicio");
+markPresence("admin");
 consumeAdminNotificationRoute();
