@@ -364,9 +364,9 @@ select:focus-visible {
 .empty { padding: 24px; text-align: center; color: var(--muted); background: #fff; border-radius: 22px; }
 .wide { grid-column: 1 / -1; }
 
-.bottom-nav { position: fixed; left: 50%; bottom: 0; transform: translateX(-50%); width: min(100%, 430px); min-height: 82px; display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 4px; padding: 8px 6px 10px; background: linear-gradient(180deg, rgba(255,253,248,.96) 0%, rgba(255,245,231,.96) 100%); border-top: 1px solid #e9cda9; box-shadow: 0 -12px 28px #4a2a1114; backdrop-filter: blur(16px); z-index: 20; }
-.admin-theme .bottom-nav { grid-auto-flow: column; grid-auto-columns: 1fr; }
-.client-nav { grid-auto-flow: column; grid-auto-columns: 1fr; }
+.bottom-nav { position: fixed; left: 50%; bottom: 0; transform: translateX(-50%); width: min(100%, 430px); min-height: 82px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; padding: 8px 12px 10px; background: linear-gradient(180deg, rgba(255,253,248,.96) 0%, rgba(255,245,231,.96) 100%); border-top: 1px solid #e9cda9; box-shadow: 0 -12px 28px #4a2a1114; backdrop-filter: blur(16px); z-index: 20; }
+.admin-theme .bottom-nav { grid-template-columns: repeat(4, 1fr); }
+.client-nav { grid-template-columns: repeat(4, 1fr); }
 .nav { border: 0; border-radius: 22px; background: transparent; color: var(--muted); font-weight: 900; transition: background .18s ease, color .18s ease, transform .18s ease; display: grid; place-items: center; align-content: center; padding: 6px 4px; }
 .nav span { display: block; margin-top: 3px; font-size: .76rem; }
 .nav .ui-icon {
