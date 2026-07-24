@@ -7,11 +7,12 @@
     <title>Dueno - La Lupita</title>
     <link rel="manifest" href="/assets/manifest-admin-CyIGovmD.webmanifest" />
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,400,0,0" />
+    <script type="module" crossorigin src="/assets/index-Dhk0jAP3.js"></script>
     <link rel="stylesheet" crossorigin href="/assets/index-BCkv70Z0.css">
   </head>
   <body>
-    <main class="phone-app admin-theme login-active">
-      <section class="mobile-screen active" id="adminLogin">
+    <main class="phone-app admin-theme">
+      <section class="mobile-screen" id="adminLogin">
         <article class="login-screen">
           <img src="/assets/logo-lupita-nuevo-DH4Knzxb.jpeg" alt="La Lupita" />
           <p class="eyebrow">Acceso del administrador</p>
@@ -24,7 +25,7 @@
         </article>
       </section>
 
-      <section class="mobile-screen" id="adminInicio">
+      <section class="mobile-screen active" id="adminInicio">
         <header class="appbar">
           <img src="/assets/logo-lupita-nuevo-DH4Knzxb.jpeg" alt="La Lupita" />
           <div>
@@ -219,11 +220,6 @@
         window.firebase = { apps: [], initializeApp: function() {}, database: function() { return { ref: function() { return { on: function() {}, once: function() { return Promise.resolve({ val: function() { return null; } }); }, transaction: function() { return Promise.resolve({ committed: false }); } }; } }; } };
       }
     </script>
-    <script src="api-config.js"></script>
-    <script src="shared-store.js"></script>
-    <script src="notifications.js"></script>
-    <script src="dueno.js"></script>
-    <script src="pwa.js"></script>
   </body>
 </html>
 
