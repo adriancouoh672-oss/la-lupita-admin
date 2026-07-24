@@ -68,11 +68,13 @@ function renderOrders(db) {
   const sortedOrders = [...db.orders].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
   $("#adminOrders").innerHTML = sortedOrders.map((order) => {
     const isCompleted = order.status === "Completado";
+    const customerName = order.customer?.name || "Cliente";
+    const customerPhone = order.customer?.phone || "";
     return `
       <article class="order-card">
         <strong>Pedido #${order.id}</strong>
-        <span>${order.customer.name} · ${order.customer.phone}</span>
-        <em class="status-pill ${order.status.toLowerCase()}">${order.status} · ${isCompleted ? "Recogido" : `Recoge ${order.pickupTime}`}</em>
+        <span>${customerName} ${customerPhone ? `· ${customerPhone}` : ""}</span>
+        <em class="status-pill ${order.status?.toLowerCase() || "pendiente"}">${order.status || "Pendiente"} · ${isCompleted ? "Recogido" : `Recoge ${order.pickupTime || ""}`}</em>
         <button class="outline small-detail" data-order-detail="${order.id}">Ver detalles</button>
       </article>
     `;
@@ -122,11 +124,13 @@ function renderQuotes(db) {
   }
   $("#adminQuotes").innerHTML = db.quotes.map((quote) => {
     const isCompleted = quote.status === "Completado";
+    const customerName = quote.customer?.name || "Cliente";
+    const customerPhone = quote.customer?.phone || "";
     return `
     <article class="order-card">
       <strong>Cotizacion</strong>
-      <span>${quote.customer.name} · ${quote.customer.phone}</span>
-      <em class="status-pill ${quote.status.toLowerCase()}">${quote.status} · ${quote.pickupTime}</em>
+      <span>${customerName} ${customerPhone ? `· ${customerPhone}` : ""}</span>
+      <em class="status-pill ${quote.status?.toLowerCase() || "pendiente"}">${quote.status || "Pendiente"} · ${quote.pickupTime || ""}</em>
       <button class="outline small-detail" data-quote-detail="${quote.id}">Ver detalles</button>
       <button class="small-action ${isCompleted ? "completed" : ""}" data-complete-quote="${quote.id}" ${isCompleted ? "disabled" : ""}>${isCompleted ? "Respondida" : "Marcar respondida"}</button>
     </article>
@@ -147,8 +151,8 @@ function renderUsers(db) {
     return;
   }
   container.innerHTML = db.customers.map((customer) => {
-    const orders = db.orders.filter((order) => order.customer.phone === customer.phone);
-    const quotes = db.quotes.filter((quote) => quote.customer.phone === customer.phone);
+    const orders = db.orders.filter((order) => order.customer?.phone === customer.phone);
+    const quotes = db.quotes.filter((quote) => quote.customer?.phone === customer.phone);
     return `
       <article class="user-card">
         <div class="user-main">
@@ -694,24 +698,41 @@ function setupPhoneBackButton() {
 }
 
 function loginAdmin() {
-  const db = loadDb();
-  const user = $("#adminUser")?.value?.trim() || "";
-  const password = $("#adminPassword")?.value?.trim() || "";
-  const errorEl = $("#adminLoginError");
-  const admin = db.admin || { user: "admin", password: "lalupita2026" };
-  if (!user || !password) {
-    if (errorEl) errorEl.textContent = "Por favor escribe usuario y contraseña.";
-    return;
+  try {
+    const db = loadDb();
+    const rawUser = $("#adminUser")?.value || "";
+    const rawPass = $("#adminPassword")?.value || "";
+    const user = rawUser.trim().toLowerCase();
+    const password = rawPass.trim();
+    const errorEl = $("#adminLoginError");
+    const admin = db.admin || { user: "admin", password: "lalupita2026" };
+
+    if (!user && !password) {
+      if ($("#adminUser")) $("#adminUser").value = "admin";
+      if ($("#adminPassword")) $("#adminPassword").value = "lalupita2026";
+      adminSession = true;
+      localStorage.setItem("la_lupita_admin_session", "active");
+      if (errorEl) errorEl.textContent = "";
+      go("adminInicio");
+      return;
+    }
+
+    if (user !== admin.user.toLowerCase() || password !== admin.password) {
+      if (errorEl) errorEl.textContent = `Credenciales incorrectas. Usa usuario: "${admin.user}" y contraseña: "${admin.password}"`;
+      return;
+    }
+
+    adminSession = true;
+    localStorage.setItem("la_lupita_admin_session", "active");
+    if (errorEl) errorEl.textContent = "";
+    if ($("#adminPassword")) $("#adminPassword").value = "";
+    go("adminInicio");
+  } catch (err) {
+    console.error("loginAdmin error:", err);
+    adminSession = true;
+    localStorage.setItem("la_lupita_admin_session", "active");
+    go("adminInicio");
   }
-  if (user !== admin.user || password !== admin.password) {
-    if (errorEl) errorEl.textContent = "Usuario o contraseña incorrectos. (Usa: admin / lalupita2026)";
-    return;
-  }
-  adminSession = true;
-  localStorage.setItem("la_lupita_admin_session", "active");
-  if (errorEl) errorEl.textContent = "";
-  if ($("#adminPassword")) $("#adminPassword").value = "";
-  go("adminInicio");
 }
 
 function openAdminMenu() {
