@@ -695,17 +695,22 @@ function setupPhoneBackButton() {
 
 function loginAdmin() {
   const db = loadDb();
-  const user = $("#adminUser").value.trim();
-  const password = $("#adminPassword").value.trim();
+  const user = $("#adminUser")?.value?.trim() || "";
+  const password = $("#adminPassword")?.value?.trim() || "";
+  const errorEl = $("#adminLoginError");
   const admin = db.admin || { user: "admin", password: "lalupita2026" };
+  if (!user || !password) {
+    if (errorEl) errorEl.textContent = "Por favor escribe usuario y contraseña.";
+    return;
+  }
   if (user !== admin.user || password !== admin.password) {
-    $("#adminLoginError").textContent = "Usuario o contraseña incorrectos.";
+    if (errorEl) errorEl.textContent = "Usuario o contraseña incorrectos. (Usa: admin / lalupita2026)";
     return;
   }
   adminSession = true;
   localStorage.setItem("la_lupita_admin_session", "active");
-  $("#adminLoginError").textContent = "";
-  $("#adminPassword").value = "";
+  if (errorEl) errorEl.textContent = "";
+  if ($("#adminPassword")) $("#adminPassword").value = "";
   go("adminInicio");
 }
 
@@ -719,6 +724,11 @@ function closeAdminMenu() {
 
 document.querySelectorAll("[data-go]").forEach((button) => button.addEventListener("click", () => go(button.dataset.go)));
 $("#adminLoginBtn").onclick = loginAdmin;
+["#adminUser", "#adminPassword"].forEach((selector) => {
+  $(selector)?.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") loginAdmin();
+  });
+});
 $("#adminMenuBtn").onclick = openAdminMenu;
 document.querySelectorAll("[data-menu-open]").forEach((button) => button.onclick = openAdminMenu);
 document.querySelectorAll("[data-menu-go]").forEach((button) => {
