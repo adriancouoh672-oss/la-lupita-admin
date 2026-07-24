@@ -286,7 +286,7 @@ function startCloudSync() {
       if (originalFingerprint !== remoteFingerprint) queueCloudSave(normalized);
     });
   } catch (err) {
-    console.warn("Firebase cloud sync warning:", err);
+    console.warn("Firebase cloud sync notice:", err);
   }
 }
 
@@ -344,8 +344,10 @@ function upsertCustomer(customer) {
   return index >= 0 ? db.customers[index] : clean;
 }
 
-// A new data version starts with no client accounts, messages, orders, or quotes.
-// It also prevents a device with old localStorage from restoring removed data.
-resetLocalDataForCurrentVersion();
-startCloudSync();
+try {
+  resetLocalDataForCurrentVersion();
+  startCloudSync();
+} catch (e) {
+  console.warn("Local init notice:", e);
+}
 
