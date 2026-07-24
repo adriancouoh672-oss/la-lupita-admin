@@ -747,70 +747,73 @@ $("#adminLoginBtn").onclick = loginAdmin;
 });
 $("#adminMenuBtn").onclick = openAdminMenu;
 document.querySelectorAll("[data-menu-open]").forEach((button) => button.onclick = openAdminMenu);
+const safeBind = (sel, evt, fn) => { const el = typeof sel === "string" ? $(sel) : sel; if (el) el[evt] = fn; };
+const safeEvt = (sel, evt, fn, opts) => { const el = typeof sel === "string" ? $(sel) : sel; if (el) el.addEventListener(evt, fn, opts); };
+
 document.querySelectorAll("[data-menu-go]").forEach((button) => {
   button.onclick = () => {
     closeAdminMenu();
     go(button.dataset.menuGo);
   };
 });
-$("#closeAdminMenu").onclick = closeAdminMenu;
-$("#adminMenuModal").addEventListener("click", (event) => {
+safeBind("#closeAdminMenu", "onclick", closeAdminMenu);
+safeEvt("#adminMenuModal", "click", (event) => {
   if (event.target === $("#adminMenuModal")) closeAdminMenu();
 });
-$("#adminChatForm").onsubmit = sendAdminChatMessage;
-$("#adminLogoutBtn").onclick = () => {
+safeBind("#adminChatForm", "onsubmit", sendAdminChatMessage);
+safeBind("#adminLogoutBtn", "onclick", () => {
   adminSession = false;
   localStorage.removeItem("la_lupita_admin_session");
   closeAdminMenu();
   go("adminLogin");
-};
-$("#productImage").onchange = () => readImage($("#productImage"), (image) => {
+});
+safeBind("#productImage", "onchange", () => readImage($("#productImage"), (image) => {
   newProductImage = image;
-  $("#productImagePreview").innerHTML = `<img src="${image}" alt="Vista previa" />`;
+  if ($("#productImagePreview")) $("#productImagePreview").innerHTML = `<img src="${image}" alt="Vista previa" />`;
   $("#productUploadTile")?.classList.add("has-image");
-}, { maxSize: 1000, quality: 0.78 });
-$("#editImage").onchange = () => readImage($("#editImage"), (image) => {
+}, { maxSize: 1000, quality: 0.78 }));
+safeBind("#editImage", "onchange", () => readImage($("#editImage"), (image) => {
   editProductImage = image;
-}, { maxSize: 1000, quality: 0.78 });
-$("#adminChatImage").onchange = () => readImage($("#adminChatImage"), (image) => {
-  $("#adminChatImage").dataset.image = image;
+}, { maxSize: 1000, quality: 0.78 }));
+safeBind("#adminChatImage", "onchange", () => readImage($("#adminChatImage"), (image) => {
+  if ($("#adminChatImage")) $("#adminChatImage").dataset.image = image;
   showAdminToast("Imagen lista para enviar.");
-}, { maxSize: 1000, quality: 0.78 });
-$("#adminChatMessages").addEventListener("click", (event) => {
+}, { maxSize: 1000, quality: 0.78 }));
+safeEvt("#adminChatMessages", "click", (event) => {
   const image = event.target.closest("[data-chat-image]");
   if (image) openChatImage(image.dataset.chatImage, image.dataset.chatName);
 });
-$("#closeChatImageViewer").onclick = closeChatImageViewer;
-$("#chatImageViewer").addEventListener("click", (event) => {
+safeBind("#closeChatImageViewer", "onclick", closeChatImageViewer);
+safeEvt("#chatImageViewer", "click", (event) => {
   if (event.target === $("#chatImageViewer")) closeChatImageViewer();
 });
-$("#saveProduct").onclick = saveProduct;
-$("#saveEditProduct").onclick = saveEditProduct;
-$("#closeEditProduct").onclick = (event) => {
+safeBind("#saveProduct", "onclick", saveProduct);
+safeBind("#saveEditProduct", "onclick", saveEditProduct);
+safeBind("#closeEditProduct", "onclick", (event) => {
   event.preventDefault();
-  $("#editProductModal").close();
-};
-$("#confirmDeleteProduct").onclick = (event) => {
+  $("#editProductModal")?.close();
+});
+safeBind("#confirmDeleteProduct", "onclick", (event) => {
   event.preventDefault();
   deleteProduct();
-};
-$("#cancelDeleteProduct").onclick = (event) => {
+});
+safeBind("#cancelDeleteProduct", "onclick", (event) => {
   event.preventDefault();
   pendingDeleteProductId = null;
-  $("#deleteProductModal").close();
-};
+  $("#deleteProductModal")?.close();
+});
 document.querySelectorAll("[data-report-period]").forEach((button) => {
   button.onclick = () => {
     reportPeriod = button.dataset.reportPeriod;
     renderReport(loadDb());
   };
 });
-$("#saveUserTag").onclick = saveUserTag;
-$("#closeUserTag").onclick = (event) => {
+safeBind("#saveUserTag", "onclick", saveUserTag);
+safeBind("#closeUserTag", "onclick", (event) => {
   event.preventDefault();
   pendingUserTagPhone = "";
-  $("#userTagModal").close();
-};
+  $("#userTagModal")?.close();
+});
 window.addEventListener("focus", renderAdmin);
 window.addEventListener("storage", renderAdmin);
 window.addEventListener("la-lupita-db-updated", renderAdmin);
