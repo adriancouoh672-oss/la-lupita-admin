@@ -1,843 +1,477 @@
-const $ = (selector) => document.querySelector(selector);
-const money = (amount) => `$${Number(amount).toFixed(2)}`;
-let newProductImage = "";
-let editProductId = null;
-let editProductImage = "";
-let pendingDeleteProductId = null;
-let pendingUserTagPhone = "";
-let adminToastTimer = null;
-let adminSession = localStorage.getItem("la_lupita_admin_session") === "active";
-let reportPeriod = "today";
-let activeAdminChatId = "";
-const escapeHtml = (value) => String(value || "").replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[character]));
+import { getStore, saveStore } from "./store.js";
 
-function showAdminToast(message) {
-  const toast = $("#adminToast");
+let activeTab = "orders";
+let activeChatId = null;
+
+function showToast(msg) {
+  const toast = document.getElementById("toastMessage");
   if (!toast) return;
-  toast.textContent = message;
+  toast.textContent = msg;
   toast.classList.add("show");
-  clearTimeout(adminToastTimer);
-  adminToastTimer = setTimeout(() => toast.classList.remove("show"), 2200);
+  setTimeout(() => toast.classList.remove("show"), 2400);
 }
 
-function go(id) {
-  if (id !== "adminLogin" && !adminSession) id = "adminLogin";
-  document.querySelectorAll(".mobile-screen").forEach((screen) => screen.classList.toggle("active", screen.id === id));
-  document.querySelectorAll(".nav").forEach((nav) => nav.classList.toggle("active", nav.dataset.go === id));
-  const app = document.querySelector(".phone-app");
-  app.classList.toggle("login-active", id === "adminLogin");
-  app.classList.toggle("chat-open", id === "adminChatScreen");
-  renderAdmin();
-  window.refreshCloudData?.();
+function openModal(html) {
+  const backdrop = document.getElementById("modalBackdrop");
+  const content = document.getElementById("modalContent");
+  if (!backdrop || !content) return;
+  content.innerHTML = html;
+  backdrop.classList.add("active");
 }
 
-function openAdminNotificationRoute(route) {
-  const routes = new Set(["adminInicio", "adminCotizaciones", "adminChats", "adminProductos"]);
-  if (!adminSession || !routes.has(route)) return;
-  localStorage.removeItem("la_lupita_notification_route");
-  go(route);
+function closeModal() {
+  const backdrop = document.getElementById("modalBackdrop");
+  if (backdrop) backdrop.classList.remove("active");
 }
 
-function consumeAdminNotificationRoute() {
-  openAdminNotificationRoute(localStorage.getItem("la_lupita_notification_route") || "");
-}
+// Navigation & Auth Control
+function updateUI() {
+  const store = getStore();
+  const topHeader = document.getElementById("topHeader");
+  const bottomNav = document.getElementById("bottomNav");
 
-function productVisual(product) {
-  if (product.image) return `<img src="${product.image}" alt="${product.name}" />`;
-  return product.icon;
-}
-
-function renderAdmin() {
-  if ($("#editProductModal")?.open) return;
-  const db = loadDb();
-  renderOrders(db);
-  renderProducts(db);
-  renderQuotes(db);
-  renderUsers(db);
-  renderReport(db);
-  renderChats(db);
-  renderAdminChatModal(db);
-  renderAdminPresence(db);
-}
-
-function renderOrders(db) {
-  if (!db.orders.length) {
-    $("#adminOrders").innerHTML = `<div class="empty">Todavia no hay pedidos enviados por clientes.</div>`;
+  if (!store.adminSession) {
+    topHeader.style.display = "none";
+    bottomNav.style.display = "none";
+    switchScreen("screenLogin");
     return;
   }
-  const sortedOrders = [...db.orders].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-  $("#adminOrders").innerHTML = sortedOrders.map((order) => {
-    const isCompleted = order.status === "Completado";
-    const customerName = order.customer?.name || "Cliente";
-    const customerPhone = order.customer?.phone || "";
-    return `
-      <article class="order-card">
-        <strong>Pedido #${order.id}</strong>
-        <span>${customerName} ${customerPhone ? `· ${customerPhone}` : ""}</span>
-        <em class="status-pill ${order.status?.toLowerCase() || "pendiente"}">${order.status || "Pendiente"} · ${isCompleted ? "Recogido" : `Recoge ${order.pickupTime || ""}`}</em>
-        <button class="outline small-detail" data-order-detail="${order.id}">Ver detalles</button>
-      </article>
-    `;
-  }).join("");
-  document.querySelectorAll("[data-order-detail]").forEach((button) => button.onclick = () => openOrderDetail(button.dataset.orderDetail));
+
+  topHeader.style.display = "flex";
+  bottomNav.style.display = "flex";
+
+  document.querySelectorAll(".nav-item").forEach(item => {
+    item.classList.toggle("active", item.dataset.tab === activeTab);
+  });
+
+  if (activeTab === "orders") {
+    switchScreen("screenOrders");
+    renderOrders(store);
+  } else if (activeTab === "products") {
+    switchScreen("screenProducts");
+    renderProducts(store);
+  } else if (activeTab === "quotes") {
+    switchScreen("screenQuotes");
+    renderQuotes(store);
+  } else if (activeTab === "chats") {
+    switchScreen("screenChats");
+    renderChats(store);
+  } else if (activeTab === "analytics") {
+    switchScreen("screenAnalytics");
+    renderAnalytics(store);
+  } else if (activeTab === "users") {
+    switchScreen("screenUsers");
+    renderUsers(store);
+  }
 }
 
-function renderProducts(db) {
-  $("#adminProducts").innerHTML = db.products.map((product) => `
-    <article class="admin-product-card ${stockState(product.stock)}">
-      <div class="admin-product-head">
-        <span class="product-icon">${productVisual(product)}</span>
-        <div>
-          <strong>${product.name}</strong>
-          <small>${money(product.price)} · ${product.active ? "Activo" : "Oculto"}</small>
+function switchScreen(screenId) {
+  document.querySelectorAll(".screen-view").forEach(s => s.classList.remove("active"));
+  const target = document.getElementById(screenId);
+  if (target) target.classList.add("active");
+}
+
+// Login logic
+function performLogin(user, pass) {
+  const store = getStore();
+  const loginUser = (user || "").trim().toLowerCase();
+  const loginPass = (pass || "").trim();
+
+  if (loginUser === "admin" && loginPass === "lalupita2026") {
+    store.adminSession = true;
+    saveStore(store);
+    showToast("¡Bienvenido al Panel de Administración!");
+    updateUI();
+  } else {
+    document.getElementById("loginError").textContent = "Credenciales incorrectas (Usa: admin / lalupita2026)";
+  }
+}
+
+// Render Orders
+function renderOrders(store) {
+  const container = document.getElementById("ordersList");
+  if (!container) return;
+
+  if (!store.orders.length) {
+    container.innerHTML = `<div class="card" style="text-align:center; padding:30px; color:#666;">No hay pedidos registrados aún.</div>`;
+    return;
+  }
+
+  const sorted = [...store.orders].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  container.innerHTML = sorted.map(order => {
+    const isDone = order.status === "Completado";
+    const itemsText = (order.items || []).map(i => `${i.quantity}x ${i.name}`).join(", ");
+    return `
+      <div class="card">
+        <div class="card-header">
+          <strong>Pedido #${order.id}</strong>
+          <span class="badge ${isDone ? 'badge-success' : 'badge-pending'}">${order.status}</span>
+        </div>
+        <p style="font-size:0.9rem; font-weight:700;">👤 ${order.customer?.name || "Cliente"} (${order.customer?.phone || ""})</p>
+        <p style="font-size:0.85rem; color:#666; margin:6px 0;">🛒 ${itemsText}</p>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px;">
+          <span style="font-size:1.1rem; font-weight:800; color:var(--admin-primary);">$${Number(order.total).toFixed(2)}</span>
+          <button class="btn-primary toggle-order-btn" data-id="${order.id}" style="width:auto; padding:6px 14px; font-size:0.8rem;">
+            ${isDone ? "Marcar Pendiente" : "Marcar Completado"}
+          </button>
         </div>
       </div>
-      <div class="stock-box ${stockState(product.stock)}">
-        <span>${Number(product.stock) <= 0 ? "Piezas agotadas" : "Piezas disponibles"}</span>
-        <strong>${product.stock}</strong>
-      </div>
-      <div class="stock-actions admin-product-actions">
-        <button data-edit-product="${product.id}">Editar</button>
-        <button class="${db.dailyProductId === product.id ? "daily-active" : "daily-button"}" data-daily-product="${product.id}">${db.dailyProductId === product.id ? "Del dia" : "Pan del dia"}</button>
-        <button class="${product.active ? "toggle-active" : "toggle-hidden"}" data-toggle-product="${product.id}">${product.active ? "Ocultar" : "Activar"}</button>
-        <button class="delete-product" data-delete-product="${product.id}">Eliminar</button>
-      </div>
-    </article>
-  `).join("");
-  document.querySelectorAll("[data-edit-product]").forEach((button) => button.onclick = () => openEditProduct(Number(button.dataset.editProduct)));
-  document.querySelectorAll("[data-daily-product]").forEach((button) => button.onclick = () => setDailyProduct(Number(button.dataset.dailyProduct)));
-  document.querySelectorAll("[data-toggle-product]").forEach((button) => button.onclick = () => toggleProduct(Number(button.dataset.toggleProduct)));
-  document.querySelectorAll("[data-delete-product]").forEach((button) => button.onclick = () => openDeleteProduct(Number(button.dataset.deleteProduct)));
-}
-
-function stockState(stock) {
-  const amount = Number(stock || 0);
-  if (amount <= 0) return "stock-empty";
-  if (amount <= 8) return "stock-low";
-  return "stock-ok";
-}
-
-function renderQuotes(db) {
-  if (!db.quotes.length) {
-    $("#adminQuotes").innerHTML = `<div class="empty">Todavia no hay cotizaciones.</div>`;
-    return;
-  }
-  $("#adminQuotes").innerHTML = db.quotes.map((quote) => {
-    const isCompleted = quote.status === "Completado";
-    const customerName = quote.customer?.name || "Cliente";
-    const customerPhone = quote.customer?.phone || "";
-    return `
-    <article class="order-card">
-      <strong>Cotizacion</strong>
-      <span>${customerName} ${customerPhone ? `· ${customerPhone}` : ""}</span>
-      <em class="status-pill ${quote.status?.toLowerCase() || "pendiente"}">${quote.status || "Pendiente"} · ${quote.pickupTime || ""}</em>
-      <button class="outline small-detail" data-quote-detail="${quote.id}">Ver detalles</button>
-      <button class="small-action ${isCompleted ? "completed" : ""}" data-complete-quote="${quote.id}" ${isCompleted ? "disabled" : ""}>${isCompleted ? "Respondida" : "Marcar respondida"}</button>
-    </article>
-  `;
+    `;
   }).join("");
-  document.querySelectorAll("[data-complete-quote]").forEach((button) => {
-    if (button.disabled) return;
-    button.onclick = () => updateQuoteStatus(button.dataset.completeQuote, "Completado");
+
+  document.querySelectorAll(".toggle-order-btn").forEach(btn => {
+    btn.onclick = () => {
+      const id = btn.dataset.id;
+      const order = store.orders.find(o => o.id === id);
+      if (order) {
+        order.status = order.status === "Completado" ? "Pendiente" : "Completado";
+        saveStore(store);
+        showToast(`Pedido #${id} actualizado.`);
+      }
+    };
   });
-  document.querySelectorAll("[data-quote-detail]").forEach((button) => button.onclick = () => openQuoteDetail(button.dataset.quoteDetail));
 }
 
-function renderUsers(db) {
-  const container = $("#adminUsers");
+// Render Products
+function renderProducts(store) {
+  const container = document.getElementById("productsList");
   if (!container) return;
-  if (!db.customers.length) {
-    container.innerHTML = `<div class="empty">Todavia no hay usuarios registrados.</div>`;
-    return;
-  }
-  container.innerHTML = db.customers.map((customer) => {
-    const orders = db.orders.filter((order) => order.customer?.phone === customer.phone);
-    const quotes = db.quotes.filter((quote) => quote.customer?.phone === customer.phone);
+
+  container.innerHTML = store.products.map(product => {
+    const isDaily = store.dailyProductId === product.id;
+    const isLow = product.stock <= 8 && product.stock > 0;
+    const isOut = product.stock <= 0;
     return `
-      <article class="user-card">
-        <div class="user-main">
-          <span class="profile-photo mini-profile">${customer.photo ? `<img src="${customer.photo}" alt="${customer.name}" />` : "👤"}</span>
-          <div class="user-text">
-            <strong>${customer.name}</strong>
-            <small>${customer.phone}</small>
-            <em>${customer.tag || "Cliente"}</em>
+      <div class="card">
+        <div class="card-header">
+          <div style="display:flex; align-items:center; gap:10px;">
+            <span style="font-size:1.8rem;">${product.icon || "🥐"}</span>
+            <div>
+              <strong style="font-size:1rem;">${product.name}</strong>
+              <div style="font-size:0.8rem; color:#666;">$${Number(product.price).toFixed(2)} c/u · ${product.active ? 'Activo' : 'Oculto'}</div>
+            </div>
           </div>
-          <button class="kebab" data-user-menu="${customer.phone}" aria-label="Opciones de usuario">⋮</button>
+          ${isDaily ? '<span class="badge badge-info">⭐ Pan del Día</span>' : ''}
         </div>
-        <div class="user-menu floating-user-menu" id="userMenu-${cleanId(customer.phone)}">
-          <button data-user-detail="${customer.phone}">Detalles del perfil</button>
-          <button data-user-tag="${customer.phone}">Agregar etiqueta</button>
+        <div style="display:flex; justify-content:space-between; align-items:center; background:#f5f7f6; padding:10px 14px; border-radius:12px; margin:10px 0;">
+          <span style="font-size:0.85rem; font-weight:700;">Existencias:</span>
+          <span style="font-size:1.2rem; font-weight:800; color:${isOut ? '#dc2626' : (isLow ? '#d97706' : '#1e874b')}">
+            ${isOut ? "AGOTADO" : `${product.stock} pcs`}
+          </span>
         </div>
-        <footer>${orders.length} pedidos · ${quotes.length} cotizaciones</footer>
-      </article>
+        <div style="display:flex; gap:6px;">
+          <button class="btn-secondary stock-adj-btn" data-id="${product.id}" data-delta="5" style="flex:1; padding:6px; font-size:0.75rem;">+5 Piezas</button>
+          <button class="btn-secondary daily-btn" data-id="${product.id}" style="flex:1; padding:6px; font-size:0.75rem;">${isDaily ? "Destacado" : "Hacer del Día"}</button>
+          <button class="btn-secondary toggle-act-btn" data-id="${product.id}" style="flex:1; padding:6px; font-size:0.75rem;">${product.active ? "Ocultar" : "Mostrar"}</button>
+        </div>
+      </div>
     `;
   }).join("");
-  document.querySelectorAll("[data-user-menu]").forEach((button) => {
-    button.onclick = () => {
-      document.querySelectorAll(".user-menu.show").forEach((menu) => {
-        if (menu.id !== `userMenu-${cleanId(button.dataset.userMenu)}`) menu.classList.remove("show");
-      });
-      const menu = $(`#userMenu-${cleanId(button.dataset.userMenu)}`);
-      menu?.classList.toggle("show");
+
+  document.querySelectorAll(".stock-adj-btn").forEach(btn => {
+    btn.onclick = () => {
+      const id = Number(btn.dataset.id);
+      const delta = Number(btn.dataset.delta);
+      const product = store.products.find(p => p.id === id);
+      if (product) {
+        product.stock += delta;
+        saveStore(store);
+        showToast(`Stock de ${product.name} actualizado.`);
+      }
     };
   });
-  document.querySelectorAll("[data-user-detail]").forEach((button) => button.onclick = () => openUserDetail(button.dataset.userDetail));
-  document.querySelectorAll("[data-user-tag]").forEach((button) => button.onclick = () => openUserTag(button.dataset.userTag));
-}
 
-function renderChats(db) {
-  const container = $("#adminChatsList");
-  if (!container) return;
-  const chats = [...(db.chats || [])].sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
-  if (!chats.length) {
-    container.innerHTML = `<div class="empty">Todavia no hay mensajes de clientes.</div>`;
-    return;
-  }
-  container.innerHTML = chats.map((chat) => {
-    const messages = chronologicalMessages(chat.messages);
-    const last = messages.at(-1);
-    const currentCustomer = db.customers.find((item) => customerIdentity(item.phone) === customerIdentity(chat.customer?.phone));
-    const photo = currentCustomer?.photo || chat.customer?.photo || "";
-    const name = currentCustomer?.name || chat.customer?.name || "Cliente";
-    const preview = last?.image ? "Foto enviada" : (last?.text || "Sin mensajes");
-    const prefix = last?.from === "admin" ? "Tu: " : "";
-    return `
-      <article class="order-card chat-list-card chat-list-entry">
-        <button class="chat-list-open" type="button" data-chat-detail="${chat.id}" aria-label="Abrir chat con ${chat.customer?.name || "cliente"}">
-          <span class="chat-list-avatar">${photo ? `<img src="${escapeHtml(photo)}" alt="" />` : '<span class="material-symbols-rounded">person</span>'}</span>
-          <span class="chat-list-copy"><strong>${escapeHtml(name)}</strong><p>${escapeHtml(prefix + preview)}</p></span>
-          <time>${last ? new Date(last.createdAt).toLocaleTimeString("es-MX", { hour: "numeric", minute: "2-digit" }) : ""}</time>
-        </button>
-      </article>
-    `;
-  }).join("");
-  document.querySelectorAll("[data-chat-detail]").forEach((button) => button.onclick = () => openAdminChat(button.dataset.chatDetail));
-}
+  document.querySelectorAll(".daily-btn").forEach(btn => {
+    btn.onclick = () => {
+      const id = Number(btn.dataset.id);
+      store.dailyProductId = id;
+      saveStore(store);
+      showToast("Pan del día actualizado.");
+    };
+  });
 
-function openAdminChat(id) {
-  activeAdminChatId = id;
-  renderAdminChatModal(loadDb());
-  go("adminChatScreen");
-}
-
-function chronologicalMessages(messages) {
-  return [...(messages || [])].sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0) || String(a.id).localeCompare(String(b.id)));
-}
-
-function scrollAdminChatToNewest(container) {
-  requestAnimationFrame(() => {
-    container.scrollTop = container.scrollHeight;
-    setTimeout(() => { container.scrollTop = container.scrollHeight; }, 90);
+  document.querySelectorAll(".toggle-act-btn").forEach(btn => {
+    btn.onclick = () => {
+      const id = Number(btn.dataset.id);
+      const product = store.products.find(p => p.id === id);
+      if (product) {
+        product.active = !product.active;
+        saveStore(store);
+        showToast("Estado de visibilidad actualizado.");
+      }
+    };
   });
 }
 
-function renderAdminChatModal(db) {
-  if (!activeAdminChatId || !$("#adminChatMessages")) return;
-  const chat = db.chats.find((item) => item.id === activeAdminChatId);
-  if (!chat) return;
-  $("#adminChatScreenTitle").textContent = chat.customer?.name || "Cliente";
-  renderAdminChatAvatar(chat, db);
-  const container = $("#adminChatMessages");
-  const renderKey = `${chat.id}:${chat.updatedAt || ""}:${chat.messages?.length || 0}`;
-  if (container.dataset.renderKey === renderKey) return;
-  const keepAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 48;
-  const shouldScrollToNewest = !container.dataset.renderKey || keepAtBottom;
-  const messages = chronologicalMessages(chat.messages);
-  container.innerHTML = messages.length ? messages.map((message, index) => `
-    <div class="chat-bubble ${message.from === "admin" ? "mine" : "theirs"}${index === messages.length - 1 ? " is-new" : ""}">
-      ${message.image ? `<button class="chat-image" type="button" data-chat-image="${message.image}" data-chat-name="chat-la-lupita-${message.id}.jpg" aria-label="Abrir imagen enviada"><img src="${message.image}" alt="Imagen enviada" /><span><span class="material-symbols-rounded">fullscreen</span> Ver imagen</span></button>` : ""}
-      ${message.text ? `<p>${escapeHtml(message.text)}</p>` : ""}
-      <small>${new Date(message.createdAt).toLocaleString("es-MX", { dateStyle: "short", timeStyle: "short" })}</small>
-    </div>
-  `).join("") : `<div class="empty">Sin mensajes.</div>`;
-  container.dataset.renderKey = renderKey;
-  if (shouldScrollToNewest) scrollAdminChatToNewest(container);
-}
+// Render Quotes
+function renderQuotes(store) {
+  const container = document.getElementById("quotesList");
+  if (!container) return;
 
-function renderAdminChatAvatar(chat, db) {
-  const avatar = $("#adminChatAvatar");
-  if (!avatar) return;
-  const currentCustomer = db.customers.find((item) => customerIdentity(item.phone) === customerIdentity(chat.customer?.phone));
-  const photo = currentCustomer?.photo || chat.customer?.photo || "";
-  const name = currentCustomer?.name || chat.customer?.name || "Cliente";
-  const avatarKey = `${chat.customer?.phone || ""}:${photo}`;
-  if (avatar.dataset.avatarKey === avatarKey) return;
-  avatar.dataset.avatarKey = avatarKey;
-  avatar.replaceChildren();
-  if (!photo) {
-    avatar.innerHTML = '<span class="material-symbols-rounded">person</span>';
+  if (!store.quotes.length) {
+    container.innerHTML = `<div class="card" style="text-align:center; padding:30px; color:#666;">No hay cotizaciones pendientes.</div>`;
     return;
   }
-  const image = document.createElement("img");
-  image.src = photo;
-  image.alt = name;
-  image.onerror = () => {
-    avatar.innerHTML = '<span class="material-symbols-rounded">person</span>';
-  };
-  avatar.append(image);
+
+  container.innerHTML = store.quotes.map(quote => {
+    const isDone = quote.status === "Respondida";
+    return `
+      <div class="card">
+        <div class="card-header">
+          <strong>Cotización #${quote.id}</strong>
+          <span class="badge ${isDone ? 'badge-success' : 'badge-pending'}">${quote.status}</span>
+        </div>
+        <p style="font-size:0.9rem; font-weight:700;">👤 ${quote.customer?.name || "Cliente"} (${quote.customer?.phone || ""})</p>
+        <p style="font-size:0.85rem; font-weight:700; color:var(--admin-primary); margin:6px 0;">🍰 ${quote.product}</p>
+        <p style="font-size:0.82rem; color:#666; background:#f9f9f9; padding:8px; border-radius:8px;">"${quote.notes}"</p>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px;">
+          <span style="font-size:0.8rem; color:#888;">📅 Recoger: ${quote.date || "Fecha a acordar"} ${quote.pickupTime || ""}</span>
+          <button class="btn-primary toggle-quote-btn" data-id="${quote.id}" style="width:auto; padding:6px 14px; font-size:0.8rem;">
+            ${isDone ? "Marcar Pendiente" : "Marcar Respondida"}
+          </button>
+        </div>
+      </div>
+    `;
+  }).join("");
+
+  document.querySelectorAll(".toggle-quote-btn").forEach(btn => {
+    btn.onclick = () => {
+      const id = btn.dataset.id;
+      const quote = store.quotes.find(q => q.id === id);
+      if (quote) {
+        quote.status = quote.status === "Respondida" ? "Pendiente" : "Respondida";
+        saveStore(store);
+        showToast("Cotización actualizada.");
+      }
+    };
+  });
 }
 
-function renderAdminPresence(db = loadDb()) {
-  const status = $("#adminChatStatus");
-  if (!status) return;
-  const clientSeen = Number(db.presence?.cliente || 0);
-  status.textContent = Date.now() - clientSeen < 15000 ? "en linea" : "";
+// Render Chats
+function renderChats(store) {
+  const container = document.getElementById("chatsList");
+  if (!container) return;
+
+  if (!store.chats.length) {
+    container.innerHTML = `<div class="card" style="text-align:center; padding:30px; color:#666;">No hay chats activos.</div>`;
+    return;
+  }
+
+  container.innerHTML = store.chats.map(chat => {
+    const lastMsg = chat.messages?.[chat.messages.length - 1];
+    return `
+      <div class="card open-chat-card" data-id="${chat.id}" style="cursor:pointer;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <strong>💬 ${chat.customer?.name || "Cliente"}</strong>
+          <span style="font-size:0.75rem; color:#888;">${chat.customer?.phone || ""}</span>
+        </div>
+        <p style="font-size:0.85rem; color:#555; margin-top:6px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+          ${lastMsg ? `${lastMsg.from === 'admin' ? 'Tú: ' : ''}${lastMsg.text}` : 'Sin mensajes'}
+        </p>
+      </div>
+    `;
+  }).join("");
+
+  document.querySelectorAll(".open-chat-card").forEach(card => {
+    card.onclick = () => {
+      activeChatId = card.dataset.id;
+      openChatDetail(activeChatId);
+    };
+  });
 }
 
-function markPresence(role, isActive = true) {
-  const db = loadDb();
-  db.presence ||= {};
-  db.presence[role] = isActive ? Date.now() : 0;
-  saveDb(db, false, true);
-}
-
-function openChatImage(image, filename = "imagen-chat-la-lupita.jpg") {
-  if (!image) return;
-  $("#chatImageViewerImage").src = image;
-  $("#chatImageDownload").href = image;
-  $("#chatImageDownload").download = filename;
-  $("#chatImageViewer").showModal();
-}
-
-function closeChatImageViewer() {
-  const viewer = $("#chatImageViewer");
-  if (!viewer?.open) return;
-  viewer.close();
-  $("#chatImageViewerImage").removeAttribute("src");
-}
-
-function sendAdminChatMessage(event) {
-  event.preventDefault();
-  const input = $("#adminChatInput");
-  const text = input.value.trim();
-  const image = $("#adminChatImage").dataset.image || "";
-  if ((!text && !image) || !activeAdminChatId) return;
-  const db = loadDb();
-  const chat = db.chats.find((item) => item.id === activeAdminChatId);
+function openChatDetail(chatId) {
+  const store = getStore();
+  const chat = store.chats.find(c => c.id === chatId);
   if (!chat) return;
-  const now = new Date().toISOString();
-  chat.messages ||= [];
-  chat.messages.push({ id: nextId("MSG", chat.messages), from: "admin", text, image, createdAt: now });
-  chat.updatedAt = now;
-  saveDb(db);
-  input.value = "";
-  $("#adminChatImage").value = "";
-  $("#adminChatImage").dataset.image = "";
-  renderAdminChatModal(db);
-  renderChats(db);
-  showAdminToast("Respuesta enviada.");
-}
 
-function cleanId(value) {
-  return String(value).replace(/[^a-zA-Z0-9_-]/g, "_");
-}
-
-function openUserDetail(phone) {
-  const db = loadDb();
-  const customer = db.customers.find((item) => item.phone === phone);
-  if (!customer) return;
-  const orders = db.orders.filter((order) => order.customer.phone === phone);
-  const quotes = db.quotes.filter((quote) => quote.customer.phone === phone);
-  $("#userDetailContent").innerHTML = `
-    <button class="modal-close" id="closeUserDetail">×</button>
-    <p class="eyebrow">Detalles del perfil</p>
-    <div class="profile-top">
-      <div class="profile-photo">${customer.photo ? `<img src="${customer.photo}" alt="${customer.name}" />` : "👤"}</div>
-      <div>
-        <h2>${customer.name}</h2>
-        <p class="muted">${customer.phone}</p>
+  document.getElementById("chatDetailTitle").textContent = `Chat con ${chat.customer?.name || "Cliente"}`;
+  const box = document.getElementById("chatMessagesBox");
+  box.innerHTML = (chat.messages || []).map(m => `
+    <div style="margin-bottom:8px; text-align:${m.from === 'admin' ? 'right' : 'left'};">
+      <div style="display:inline-block; max-width:80%; padding:8px 12px; border-radius:14px; font-size:0.88rem; background:${m.from === 'admin' ? 'var(--admin-primary)' : '#e4ece8'}; color:${m.from === 'admin' ? '#fff' : '#1f2926'};">
+        ${m.text}
       </div>
     </div>
-    <div class="profile-detail"><span>Etiqueta</span><strong>${customer.tag || "Cliente"}</strong></div>
-    <div class="profile-detail"><span>Pedidos</span><strong>${orders.length}</strong></div>
-    <div class="profile-detail"><span>Cotizaciones</span><strong>${quotes.length}</strong></div>
-  `;
-  $("#userDetailModal").showModal();
-  $("#closeUserDetail").onclick = () => $("#userDetailModal").close();
+  `).join("");
+
+  box.scrollTop = box.scrollHeight;
+  switchScreen("screenChatDetail");
 }
 
-function openUserTag(phone) {
-  const db = loadDb();
-  const customer = db.customers.find((item) => item.phone === phone);
-  if (!customer) return;
-  pendingUserTagPhone = phone;
-  $("#userTagTitle").textContent = customer.name;
-  $("#userTagSelect").value = customer.tag || "Cliente";
-  $("#userTagModal").showModal();
-}
+// Render Analytics
+function renderAnalytics(store) {
+  const container = document.getElementById("analyticsContent");
+  if (!container) return;
 
-function saveUserTag(event) {
-  event.preventDefault();
-  if (!pendingUserTagPhone) return;
-  const db = loadDb();
-  const updatedAt = new Date().toISOString();
-  db.customers = db.customers.map((customer) => customer.phone === pendingUserTagPhone ? { ...customer, tag: $("#userTagSelect").value, updatedAt } : customer);
-  saveDb(db);
-  pendingUserTagPhone = "";
-  $("#userTagModal").close();
-  renderAdmin();
-  showAdminToast("Etiqueta guardada.");
-}
+  const totalSales = store.orders
+    .filter(o => o.status === "Completado")
+    .reduce((sum, o) => sum + Number(o.total || 0), 0);
 
-function orderAmount(order) {
-  const items = Array.isArray(order.items) ? order.items : [];
-  if (!items.length) return Math.max(0, Number(order.total) || 0);
-  return items.reduce((sum, item) => {
-    const quantity = Math.max(0, Number(item.quantity) || 0);
-    const price = Math.max(0, Number(item.price) || 0);
-    return sum + quantity * price;
-  }, 0);
-}
+  const completedCount = store.orders.filter(o => o.status === "Completado").length;
 
-function startOfLocalDay(date) {
-  const day = new Date(date);
-  day.setHours(0, 0, 0, 0);
-  return day;
-}
-
-function orderIsInReportPeriod(order, period, now = new Date()) {
-  const createdAt = new Date(order.createdAt);
-  if (Number.isNaN(createdAt.getTime()) || createdAt > now) return false;
-  const today = startOfLocalDay(now);
-  const start = new Date(today);
-  if (period === "week") start.setDate(start.getDate() - 6);
-  if (period === "month") start.setDate(start.getDate() - 29);
-  return createdAt >= start;
-}
-
-function renderReport(db) {
-  const report = $("#adminReport");
-  if (!report) return;
-  const labels = { today: "Hoy", week: "1 semana", month: "1 mes" };
-  const now = new Date();
-  const selectedOrders = db.orders.filter((order) =>
-    String(order.status || "").toLowerCase() === "completado" &&
-    orderIsInReportPeriod(order, reportPeriod, now)
-  );
-  const totalOf = (orders) => orders.reduce((sum, order) => sum + orderAmount(order), 0);
-  const productTotals = {};
-  selectedOrders.forEach((order) => {
-    (order.items || []).forEach((item) => {
-      const name = item.name || "Producto sin nombre";
-      const quantity = Math.max(0, Number(item.quantity) || 0);
-      const price = Math.max(0, Number(item.price) || 0);
-      productTotals[name] ||= { qty: 0, total: 0 };
-      productTotals[name].qty += quantity;
-      productTotals[name].total += quantity * price;
-    });
-  });
-  const totalQty = Object.values(productTotals).reduce((sum, item) => sum + item.qty, 0);
-  $("#reportPeriodLabel").textContent = labels[reportPeriod] || "Hoy";
-  $("#reportPeriodTotal").textContent = money(totalOf(selectedOrders));
-  $("#reportPeriodCount").textContent = `${totalQty} productos vendidos`;
-  document.querySelectorAll("[data-report-period]").forEach((button) => button.classList.toggle("active", button.dataset.reportPeriod === reportPeriod));
-  const items = Object.entries(productTotals).sort((a, b) => b[1].qty - a[1].qty);
-  report.innerHTML = items.length ? items.map(([name, qty]) => `
-    <article class="report-row"><strong>${name}</strong><span>${qty.qty} piezas · ${money(qty.total)}</span></article>
-  `).join("") : `<div class="empty">Aun no hay ventas completadas para resumir.</div>`;
-}
-
-function openOrderDetail(id) {
-  const db = loadDb();
-  const order = db.orders.find((item) => item.id === id);
-  if (!order) return;
-  const isCompleted = order.status === "Completado";
-  const items = order.items.map((item) => `<li>${item.quantity} x ${item.name} (${money(item.quantity * item.price)})</li>`).join("");
-  $("#orderDetailContent").innerHTML = `
-    <button class="modal-close" id="closeOrderDetail">×</button>
-    <p class="eyebrow">Detalles del pedido</p>
-    <h2>Pedido #${order.id}</h2>
-    <p class="muted">${order.customer.name} · ${order.customer.phone}</p>
-    <ul class="order-items detail-items">${items}</ul>
-    <div class="profile-detail"><span>Hora de recoger</span><strong>${order.pickupTime}</strong></div>
-    <div class="profile-detail"><span>Total</span><strong>${money(order.total)}</strong></div>
-    <div class="profile-detail order-status-detail ${isCompleted ? "status-completed" : "status-pending"}"><span>Estado</span><strong>${order.status}</strong></div>
-    <button class="small-action ${isCompleted ? "completed" : ""}" id="detailCompleteOrder" ${isCompleted ? "disabled" : ""}>
-      ${isCompleted ? "Completado" : "Marcar completado"}
-    </button>
-  `;
-  $("#orderDetailModal").showModal();
-  $("#closeOrderDetail").onclick = () => $("#orderDetailModal").close();
-  $("#detailCompleteOrder").onclick = () => {
-    if (order.status === "Completado") return;
-    updateOrderStatus(order.id, "Completado");
-    $("#orderDetailModal").close();
-  };
-}
-
-function openQuoteDetail(id) {
-  const db = loadDb();
-  const quote = db.quotes.find((item) => item.id === id);
-  if (!quote) return;
-  $("#quoteDetailContent").innerHTML = `
-    <button class="modal-close" id="closeQuoteDetail">×</button>
-    <p class="eyebrow">Detalles de cotizacion</p>
-    <h2>Cotizacion</h2>
-    <p class="muted">${quote.customer.name} · ${quote.customer.phone}</p>
-    <div class="quote-spec-card quote-detail-spec">
-      <b>Especificaciones</b>
-      <p><strong>${quote.product}</strong></p>
-      <p>${quote.notes}</p>
+  container.innerHTML = `
+    <div class="card" style="background:var(--admin-primary); color:#fff; text-align:center; padding:24px;">
+      <span style="font-size:0.85rem; opacity:0.85;">Total Ventas Completadas</span>
+      <h2 style="font-size:2.2rem; font-family:'Outfit',sans-serif; margin-top:4px;">$${totalSales.toFixed(2)}</h2>
+      <p style="font-size:0.8rem; opacity:0.9; margin-top:6px;">${completedCount} pedidos completados con éxito</p>
     </div>
-    <div class="profile-detail"><span>Hora</span><strong>${quote.pickupTime}</strong></div>
-    <div class="profile-detail"><span>Estado</span><strong>${quote.status}</strong></div>
-    ${quote.image ? `<button class="quote-image detail-quote-image quote-image-open" id="openQuoteImage" type="button" aria-label="Abrir imagen de referencia"><img src="${quote.image}" alt="Referencia de cotizacion" /><span class="quote-image-open-icon material-symbols-rounded">open_in_full</span></button>` : `<div class="empty">Sin imagen de referencia.</div>`}
+
+    <div class="card">
+      <h3 style="font-size:1rem; font-family:'Outfit',sans-serif; margin-bottom:10px;">Resumen General</h3>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; text-align:center;">
+        <div style="background:#f5f7f6; padding:12px; border-radius:12px;">
+          <span style="font-size:0.75rem; color:#666;">Productos Activos</span>
+          <strong style="display:block; font-size:1.4rem; color:var(--admin-primary);">${store.products.filter(p=>p.active).length}</strong>
+        </div>
+        <div style="background:#f5f7f6; padding:12px; border-radius:12px;">
+          <span style="font-size:0.75rem; color:#666;">Clientes Registrados</span>
+          <strong style="display:block; font-size:1.4rem; color:var(--admin-primary);">${store.customers.length}</strong>
+        </div>
+      </div>
+    </div>
   `;
-  $("#quoteDetailModal").showModal();
-  $("#closeQuoteDetail").onclick = () => $("#quoteDetailModal").close();
-  $("#openQuoteImage")?.addEventListener("click", () => openChatImage(quote.image, "referencia-cotizacion.jpg"));
 }
 
-function updateOrderStatus(id, status) {
-  const db = loadDb();
-  db.orders = db.orders.map((order) => order.id === id ? { ...order, status, updatedAt: new Date().toISOString() } : order);
-  saveDb(db);
-  renderAdmin();
-  showAdminToast("Estado del pedido actualizado.");
+// Render Users
+function renderUsers(store) {
+  const container = document.getElementById("usersList");
+  if (!container) return;
+
+  container.innerHTML = store.customers.map(c => `
+    <div class="card" style="display:flex; justify-content:space-between; align-items:center;">
+      <div>
+        <strong>👤 ${c.name}</strong>
+        <div style="font-size:0.8rem; color:#666;">📞 ${c.phone}</div>
+      </div>
+      <span class="badge badge-info">${c.tag || "Cliente"}</span>
+    </div>
+  `).join("");
 }
 
-function updateQuoteStatus(id, status) {
-  const db = loadDb();
-  db.quotes = db.quotes.map((quote) => quote.id === id ? { ...quote, status, updatedAt: new Date().toISOString() } : quote);
-  saveDb(db);
-  renderAdmin();
-  showAdminToast("Cotizacion actualizada.");
-}
+// Add New Product Modal
+function openNewProductModal() {
+  openModal(`
+    <h3 style="font-family:'Outfit',sans-serif; margin-bottom:14px; color:var(--admin-primary);">Agregar Nuevo Producto</h3>
+    <div class="form-group">
+      <label>Nombre del Producto</label>
+      <input type="text" id="newProdName" class="input-field" placeholder="Ej. Dona de Chocolate" />
+    </div>
+    <div class="form-group">
+      <label>Precio ($)</label>
+      <input type="number" id="newProdPrice" class="input-field" placeholder="18" />
+    </div>
+    <div class="form-group">
+      <label>Piezas Iniciales</label>
+      <input type="number" id="newProdStock" class="input-field" placeholder="25" />
+    </div>
+    <div class="form-group">
+      <label>Descripción</label>
+      <input type="text" id="newProdDesc" class="input-field" placeholder="Descripción breve" />
+    </div>
+    <button class="btn-primary" id="saveNewProdBtn">Guardar Producto</button>
+    <button class="btn-secondary" id="closeModalBtn">Cancelar</button>
+  `);
 
-function setDailyProduct(id) {
-  const db = loadDb();
-  db.dailyProductId = id;
-  db.updatedAt = new Date().toISOString();
-  saveDb(db);
-  renderAdmin();
-  showAdminToast("Pan del dia actualizado.");
-}
+  document.getElementById("closeModalBtn").onclick = closeModal;
+  document.getElementById("saveNewProdBtn").onclick = () => {
+    const name = document.getElementById("newProdName").value.trim();
+    const price = Number(document.getElementById("newProdPrice").value);
+    const stock = Number(document.getElementById("newProdStock").value || 0);
+    const desc = document.getElementById("newProdDesc").value.trim();
 
-function toggleProduct(id) {
-  const db = loadDb();
-  db.products = db.products.map((product) => product.id === id ? { ...product, active: !product.active, updatedAt: new Date().toISOString() } : product);
-  saveDb(db);
-  renderAdmin();
-  showAdminToast("Disponibilidad del producto actualizada.");
-}
+    if (!name || !price) {
+      showToast("Escribe nombre y precio válido.");
+      return;
+    }
 
-function openDeleteProduct(id) {
-  const db = loadDb();
-  const product = db.products.find((item) => item.id === id);
-  if (!product) return;
-  pendingDeleteProductId = id;
-  $("#deleteProductText").textContent = `¿Seguro que quieres eliminar "${product.name}" del catalogo?`;
-  $("#deleteProductModal").showModal();
-}
-
-function deleteProduct() {
-  if (!pendingDeleteProductId) return;
-  const db = loadDb();
-  db.products = db.products.filter((product) => product.id !== pendingDeleteProductId);
-  saveDb(db);
-  pendingDeleteProductId = null;
-  $("#deleteProductModal").close();
-  renderAdmin();
-  showAdminToast("Producto eliminado.");
-}
-
-function changeStock(id, amount) {
-  const db = loadDb();
-  db.products = db.products.map((product) => product.id === id ? { ...product, stock: Math.max(0, Number(product.stock || 0) + amount), updatedAt: new Date().toISOString() } : product);
-  saveDb(db);
-  renderAdmin();
-}
-
-function readImage(input, callback, options = {}) {
-  const file = input.files?.[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = () => {
-    const image = new Image();
-    image.onload = () => {
-      const maxSize = options.maxSize || 1000;
-      const scale = Math.min(1, maxSize / Math.max(image.width, image.height));
-      const canvas = document.createElement("canvas");
-      canvas.width = Math.max(1, Math.round(image.width * scale));
-      canvas.height = Math.max(1, Math.round(image.height * scale));
-      canvas.getContext("2d").drawImage(image, 0, 0, canvas.width, canvas.height);
-      callback(canvas.toDataURL("image/jpeg", options.quality || 0.8));
-    };
-    image.onerror = () => callback(reader.result);
-    image.src = reader.result;
-  };
-  reader.readAsDataURL(file);
-}
-
-function saveProduct() {
-  const name = $("#productName").value.trim();
-  const category = $("#productCategory").value;
-  const price = Number($("#productPrice").value);
-  const stock = Number($("#productStock").value || 0);
-  const desc = $("#productDesc").value.trim();
-  if (!name || !price || !desc) {
-    showAdminToast("Completa nombre, precio y descripcion.");
-    return;
-  }
-  const db = loadDb();
-  db.products.push({
-    id: Date.now(),
-    name,
-    category,
-    price,
-    stock,
-    icon: iconForProduct({ name, category }),
-    image: newProductImage,
-    desc,
-    active: true,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
-  });
-  saveDb(db);
-  $("#productName").value = "";
-  $("#productPrice").value = "";
-  $("#productStock").value = "";
-  $("#productImage").value = "";
-  $("#productDesc").value = "";
-  $("#productImagePreview").innerHTML = "+";
-  $("#productUploadTile")?.classList.remove("has-image");
-  newProductImage = "";
-  renderAdmin();
-  go("adminProductos");
-  showAdminToast("Producto guardado.");
-}
-
-function openEditProduct(id) {
-  const db = loadDb();
-  const product = db.products.find((item) => item.id === id);
-  if (!product) return;
-  editProductId = id;
-  editProductImage = product.image || "";
-  $("#editTitle").textContent = product.name;
-  $("#editPrice").value = product.price;
-  $("#editStock").value = product.stock;
-  $("#editDesc").value = product.desc;
-  $("#editImage").value = "";
-  $("#editProductModal").showModal();
-}
-
-function saveEditProduct(event) {
-  event.preventDefault();
-  const db = loadDb();
-  db.products = db.products.map((product) => {
-    if (product.id !== editProductId) return product;
-    return {
-      ...product,
-      price: Number($("#editPrice").value),
-      stock: Math.max(0, Number($("#editStock").value)),
-      desc: $("#editDesc").value.trim(),
-      image: editProductImage,
-      updatedAt: new Date().toISOString()
-    };
-  });
-  saveDb(db);
-  $("#editProductModal").close();
-  renderAdmin();
-  showAdminToast("Cambios guardados.");
-}
-
-function setupSwipeNavigation(screenOrder) {
-  const app = document.querySelector(".phone-app");
-  let startX = 0;
-  let startY = 0;
-
-  app.addEventListener("touchstart", (event) => {
-    if (document.querySelector("dialog[open]")) return;
-    startX = event.touches[0].clientX;
-    startY = event.touches[0].clientY;
-  }, { passive: true });
-
-  app.addEventListener("touchend", (event) => {
-    if (!startX || document.querySelector("dialog[open]")) return;
-    const activeScreen = document.querySelector(".mobile-screen.active")?.id;
-    const index = screenOrder.indexOf(activeScreen);
-    if (index < 0) return;
-
-    const endX = event.changedTouches[0].clientX;
-    const endY = event.changedTouches[0].clientY;
-    const diffX = endX - startX;
-    const diffY = endY - startY;
-    startX = 0;
-    startY = 0;
-
-    if (Math.abs(diffX) < 70 || Math.abs(diffX) < Math.abs(diffY) * 1.4) return;
-    const nextIndex = diffX < 0 ? index + 1 : index - 1;
-    if (screenOrder[nextIndex]) go(screenOrder[nextIndex]);
-  }, { passive: true });
-}
-
-function handleBackNavigation() {
-  const openDialog = document.querySelector("dialog[open]");
-  if (openDialog) {
-    openDialog.close();
-    return;
-  }
-  const activeScreen = document.querySelector(".mobile-screen.active")?.id;
-  if (activeScreen && activeScreen !== "adminInicio") go("adminInicio");
-}
-
-function setupPhoneBackButton() {
-  const appPlugin = window.Capacitor?.Plugins?.App;
-  if (appPlugin?.addListener) {
-    appPlugin.addListener("backButton", () => {
-      handleBackNavigation();
+    const store = getStore();
+    store.products.push({
+      id: Date.now(),
+      name,
+      category: "dulce",
+      price,
+      stock,
+      icon: "🍩",
+      desc: desc || "Producto recién horneado.",
+      active: true,
+      image: ""
     });
-  }
 
-  history.replaceState({ screen: "app" }, "");
-  history.pushState({ screen: "app-lock" }, "");
-  window.addEventListener("popstate", () => {
-    handleBackNavigation();
-    history.pushState({ screen: "app-lock" }, "");
-  });
-}
-
-function loginAdmin() {
-  try {
-    const db = loadDb();
-    const rawUser = $("#adminUser")?.value || "";
-    const rawPass = $("#adminPassword")?.value || "";
-    const user = rawUser.trim().toLowerCase();
-    const password = rawPass.trim();
-    const errorEl = $("#adminLoginError");
-    const admin = db.admin || { user: "admin", password: "lalupita2026" };
-
-    if (!user && !password) {
-      if ($("#adminUser")) $("#adminUser").value = "admin";
-      if ($("#adminPassword")) $("#adminPassword").value = "lalupita2026";
-      adminSession = true;
-      localStorage.setItem("la_lupita_admin_session", "active");
-      if (errorEl) errorEl.textContent = "";
-      go("adminInicio");
-      return;
-    }
-
-    if (user !== admin.user.toLowerCase() || password !== admin.password) {
-      if (errorEl) errorEl.textContent = `Credenciales incorrectas. Usa usuario: "${admin.user}" y contraseña: "${admin.password}"`;
-      return;
-    }
-
-    adminSession = true;
-    localStorage.setItem("la_lupita_admin_session", "active");
-    if (errorEl) errorEl.textContent = "";
-    if ($("#adminPassword")) $("#adminPassword").value = "";
-    go("adminInicio");
-  } catch (err) {
-    console.error("loginAdmin error:", err);
-    adminSession = true;
-    localStorage.setItem("la_lupita_admin_session", "active");
-    go("adminInicio");
-  }
-}
-
-function openAdminMenu() {
-  $("#adminMenuModal").showModal();
-}
-
-function closeAdminMenu() {
-  $("#adminMenuModal").close();
-}
-
-document.querySelectorAll("[data-go]").forEach((button) => button.addEventListener("click", () => go(button.dataset.go)));
-$("#adminLoginBtn").onclick = loginAdmin;
-["#adminUser", "#adminPassword"].forEach((selector) => {
-  $(selector)?.addEventListener("keydown", (event) => {
-    if (event.key === "Enter") loginAdmin();
-  });
-});
-$("#adminMenuBtn").onclick = openAdminMenu;
-document.querySelectorAll("[data-menu-open]").forEach((button) => button.onclick = openAdminMenu);
-document.querySelectorAll("[data-menu-go]").forEach((button) => {
-  button.onclick = () => {
-    closeAdminMenu();
-    go(button.dataset.menuGo);
+    saveStore(store);
+    closeModal();
+    showToast("¡Producto creado con éxito!");
+    updateUI();
   };
-});
-$("#closeAdminMenu").onclick = closeAdminMenu;
-$("#adminMenuModal").addEventListener("click", (event) => {
-  if (event.target === $("#adminMenuModal")) closeAdminMenu();
-});
-$("#adminChatForm").onsubmit = sendAdminChatMessage;
-$("#adminLogoutBtn").onclick = () => {
-  adminSession = false;
-  localStorage.removeItem("la_lupita_admin_session");
-  closeAdminMenu();
-  go("adminLogin");
-};
-$("#productImage").onchange = () => readImage($("#productImage"), (image) => {
-  newProductImage = image;
-  $("#productImagePreview").innerHTML = `<img src="${image}" alt="Vista previa" />`;
-  $("#productUploadTile")?.classList.add("has-image");
-}, { maxSize: 1000, quality: 0.78 });
-$("#editImage").onchange = () => readImage($("#editImage"), (image) => {
-  editProductImage = image;
-}, { maxSize: 1000, quality: 0.78 });
-$("#adminChatImage").onchange = () => readImage($("#adminChatImage"), (image) => {
-  $("#adminChatImage").dataset.image = image;
-  showAdminToast("Imagen lista para enviar.");
-}, { maxSize: 1000, quality: 0.78 });
-$("#adminChatMessages").addEventListener("click", (event) => {
-  const image = event.target.closest("[data-chat-image]");
-  if (image) openChatImage(image.dataset.chatImage, image.dataset.chatName);
-});
-$("#closeChatImageViewer").onclick = closeChatImageViewer;
-$("#chatImageViewer").addEventListener("click", (event) => {
-  if (event.target === $("#chatImageViewer")) closeChatImageViewer();
-});
-$("#saveProduct").onclick = saveProduct;
-$("#saveEditProduct").onclick = saveEditProduct;
-$("#closeEditProduct").onclick = (event) => {
-  event.preventDefault();
-  $("#editProductModal").close();
-};
-$("#confirmDeleteProduct").onclick = (event) => {
-  event.preventDefault();
-  deleteProduct();
-};
-$("#cancelDeleteProduct").onclick = (event) => {
-  event.preventDefault();
-  pendingDeleteProductId = null;
-  $("#deleteProductModal").close();
-};
-document.querySelectorAll("[data-report-period]").forEach((button) => {
-  button.onclick = () => {
-    reportPeriod = button.dataset.reportPeriod;
-    renderReport(loadDb());
-  };
-});
-$("#saveUserTag").onclick = saveUserTag;
-$("#closeUserTag").onclick = (event) => {
-  event.preventDefault();
-  pendingUserTagPhone = "";
-  $("#userTagModal").close();
-};
-window.addEventListener("focus", renderAdmin);
-window.addEventListener("storage", renderAdmin);
-window.addEventListener("la-lupita-db-updated", renderAdmin);
-window.addEventListener("la-lupita-notification-route", (event) => openAdminNotificationRoute(event.detail?.route || ""));
-document.addEventListener("visibilitychange", () => {
-  if (document.hidden) markPresence("admin", false);
-  else {
-    markPresence("admin");
-    window.refreshCloudData?.();
-  }
-});
-window.addEventListener("pagehide", () => markPresence("admin", false));
-setInterval(() => window.refreshCloudData?.(), 5000);
-setInterval(() => {
-  if (adminSession && !document.hidden) markPresence("admin");
-}, 9000);
-setupSwipeNavigation(["adminInicio", "adminCotizaciones", "adminChats", "adminProductos"]);
-setupPhoneBackButton();
-window.LaLupitaNotifications?.init("admin");
-renderAdmin();
+}
 
-if (adminSession) go(location.hash ? location.hash.replace("#", "") : "adminInicio");
-else go("adminLogin");
-if (adminSession) markPresence("admin");
-consumeAdminNotificationRoute();
+// Event Listeners Initializer
+document.addEventListener("DOMContentLoaded", () => {
+  // Login handlers
+  document.getElementById("loginSubmitBtn").onclick = () => {
+    const u = document.getElementById("adminUser").value;
+    const p = document.getElementById("adminPass").value;
+    performLogin(u, p);
+  };
+
+  document.getElementById("loginDemoBtn").onclick = () => {
+    performLogin("admin", "lalupita2026");
+  };
+
+  document.getElementById("logoutBtn").onclick = () => {
+    const store = getStore();
+    store.adminSession = false;
+    saveStore(store);
+    showToast("Sesión cerrada.");
+    updateUI();
+  };
+
+  // Nav Tab Buttons
+  document.querySelectorAll(".nav-item[data-tab]").forEach(item => {
+    item.onclick = () => {
+      activeTab = item.dataset.tab;
+      updateUI();
+    };
+  });
+
+  // Open New Product
+  const openNewProductBtn = document.getElementById("openNewProductBtn");
+  if (openNewProductBtn) openNewProductBtn.onclick = openNewProductModal;
+
+  // Chat back button
+  const backBtn = document.getElementById("backToChatsBtn");
+  if (backBtn) backBtn.onclick = () => {
+    activeTab = "chats";
+    updateUI();
+  };
+
+  // Chat send message
+  const sendBtn = document.getElementById("chatSendBtn");
+  if (sendBtn) sendBtn.onclick = () => {
+    const input = document.getElementById("chatInputText");
+    const text = (input.value || "").trim();
+    if (!text || !activeChatId) return;
+
+    const store = getStore();
+    const chat = store.chats.find(c => c.id === activeChatId);
+    if (chat) {
+      chat.messages ||= [];
+      chat.messages.push({
+        id: "M" + Date.now(),
+        from: "admin",
+        text,
+        createdAt: new Date().toISOString()
+      });
+      saveStore(store);
+      input.value = "";
+      openChatDetail(activeChatId);
+    }
+  };
+
+  // Live Sync Listeners across tabs
+  window.addEventListener("lupita-store-change", () => updateUI());
+  window.addEventListener("storage", () => updateUI());
+
+  // Initial render
+  updateUI();
+});
