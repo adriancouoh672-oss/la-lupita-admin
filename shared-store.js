@@ -1,4 +1,4 @@
-﻿const STORE_KEY = "la_lupita_demo_db_cloud_v1";
+const STORE_KEY = "la_lupita_demo_db_cloud_v1";
 const DATA_VERSION_KEY = "la_lupita_data_version";
 const DATA_VERSION = "2026-07-15-production-reset";
 const FIREBASE_CONFIG = window.LA_LUPITA_FIREBASE_CONFIG || {};
@@ -263,26 +263,31 @@ function hasFirebaseConfig() {
 
 function startCloudSync() {
   if (!hasFirebaseConfig() || cloudRef) return;
-  firebase.initializeApp(FIREBASE_CONFIG);
-  cloudRef = firebase.database().ref(FIREBASE_PATH);
-  cloudRef.on("value", (snapshot) => {
-    const value = snapshot.val();
-    if (!value) {
-      cloudReady = true;
-      if (!cloudWritePending) cloudRef.transaction(() => normalizeDb(structuredClone(seedDatabase)));
-      return;
+  try {
+    if (!window.firebase?.apps?.length) {
+      firebase.initializeApp(FIREBASE_CONFIG);
     }
-    const originalFingerprint = JSON.stringify(value);
-    const normalized = normalizeDb(value);
-    const remoteFingerprint = JSON.stringify(normalized);
-    cloudReady = true;
-    // Do not let an older Firebase response overwrite a quote/order/chat still waiting to upload.
-    if (cloudWritePending && remoteFingerprint !== queuedCloudFingerprint) return;
-    applyingCloudUpdate = true;
-    saveDb(normalized, true, false);
-    applyingCloudUpdate = false;
-    if (originalFingerprint !== remoteFingerprint) queueCloudSave(normalized);
-  });
+    cloudRef = firebase.database().ref(FIREBASE_PATH);
+    cloudRef.on("value", (snapshot) => {
+      const value = snapshot.val();
+      if (!value) {
+        cloudReady = true;
+        if (!cloudWritePending) cloudRef.transaction(() => normalizeDb(structuredClone(seedDatabase)));
+        return;
+      }
+      const originalFingerprint = JSON.stringify(value);
+      const normalized = normalizeDb(value);
+      const remoteFingerprint = JSON.stringify(normalized);
+      cloudReady = true;
+      if (cloudWritePending && remoteFingerprint !== queuedCloudFingerprint) return;
+      applyingCloudUpdate = true;
+      saveDb(normalized, true, false);
+      applyingCloudUpdate = false;
+      if (originalFingerprint !== remoteFingerprint) queueCloudSave(normalized);
+    });
+  } catch (err) {
+    console.warn("Firebase cloud sync warning:", err);
+  }
 }
 
 async function refreshCloudData() {
